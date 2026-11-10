@@ -8,6 +8,7 @@ import { BreakdownTable } from './components/BreakdownTable';
 import { translateJavaToMCreator } from './lib/mcreatorConverter';
 import { MCreatorElementType, NeoForgeVersion, TranslationResult } from './types';
 import { Layers, FileCode, Cpu, ListCheck, Play, CheckCircle2, X } from 'lucide-react';
+import { CustomDropdown } from './components/CustomDropdown';
 
 const DEFAULT_JAVA_INPUT = `package com.backwoods.mod.procedures;
 
@@ -183,7 +184,10 @@ export default function App() {
         <div className="h-[calc(100vh-5.5rem)] min-h-[500px]">
           <JavaEditorPanel
             code={code}
-            onChangeCode={setCode}
+            onChangeCode={(newCode) => {
+              setCode(newCode);
+              setSelectedMethod(undefined);
+            }}
             targetEvent={targetEvent}
             onChangeTargetEvent={setTargetEvent}
             onTranslate={() => handleTranslate()}
@@ -252,24 +256,27 @@ export default function App() {
             {result && (
               <div className="flex items-center gap-2">
                 {result.detectedMethods && result.detectedMethods.length > 1 && (
-                  <div className="flex items-center gap-1.5 bg-[#24201D] px-2 py-0.5 rounded border border-[#3B342E]">
-                    <span className="text-[10px] text-[#A39B8E]">Method:</span>
-                    <select
-                      value={result.activeMethodName || ''}
-                      onChange={(e) => {
-                        const m = e.target.value;
-                        setSelectedMethod(m);
-                        handleTranslate(m, true);
-                      }}
-                      className="bg-transparent text-[11px] font-mono text-[#CEB098] outline-none cursor-pointer"
-                    >
-                      {result.detectedMethods.map(m => (
-                        <option key={m.name} value={m.name} className="bg-[#1A1816] text-[#FAF6F0]">
-                          {m.name} ({m.statementCount} stmts){m.isMainProcedure ? ' ★' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <CustomDropdown
+                    value={result.activeMethodName || result.detectedMethods[0]?.signature}
+                    onChange={(m) => {
+                      setSelectedMethod(m);
+                      handleTranslate(m, true);
+                    }}
+                    prefix="Method:"
+                    mono
+                    align="right"
+                    options={result.detectedMethods.map((m) => {
+                      const isDelegator = /^execute\s*\([\s\S]*?\);?$/.test(m.body.trim().replace(/\/\/.*$/gm, '').trim());
+                      let badge = '';
+                      if (m.isMainProcedure) badge = '★ Procedure Logic';
+                      else if (isDelegator) badge = 'Bridge -> execute';
+                      return {
+                        value: m.signature,
+                        label: `${m.name} (${m.statementCount} stmts)${m.isMainProcedure ? ' ★' : ''}`,
+                        description: badge ? `${badge} • ${m.signature}` : m.signature,
+                      };
+                    })}
+                  />
                 )}
                 <span className="text-[11px] font-mono text-[#CEB098] bg-[#24201D] px-2.5 py-0.5 rounded border border-[#3B342E]">
                   {result.procedureName}{result.fileExtension}

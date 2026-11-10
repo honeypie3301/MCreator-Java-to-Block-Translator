@@ -582,7 +582,7 @@ const BlocklyNodeRenderer: React.FC<{
   selectedLineNumber?: number | null;
   selectedBlockId?: string | null;
   onSelectBlock?: (blockId: string, sourceLine?: number) => void;
-}> = ({ node, eventTrigger, inputLayoutMode = 'auto', selectedLineNumber, selectedBlockId, onSelectBlock }) => {
+}> = React.memo(({ node, eventTrigger, inputLayoutMode = 'auto', selectedLineNumber, selectedBlockId, onSelectBlock }) => {
   const theme = MCREATOR_CATEGORY_THEMES[node.category] || MCREATOR_CATEGORY_THEMES.control;
   const isSelected = checkIsNodeSelected(node, selectedLineNumber, selectedBlockId);
   const isExternal = shouldUseExternalInputs(node, inputLayoutMode);
@@ -1592,7 +1592,7 @@ const BlocklyNodeRenderer: React.FC<{
       )}
     </div>
   );
-};
+});
 
 /* -------------------------------------------------------------------------- */
 /*                  Inline Expression & Getter Pill Renderers                 */
@@ -1604,7 +1604,7 @@ const InlineValueBlock: React.FC<{
   selectedLineNumber?: number | null;
   selectedBlockId?: string | null;
   onSelectBlock?: (blockId: string, sourceLine?: number) => void;
-}> = ({ node, inputLayoutMode = 'auto', selectedLineNumber, selectedBlockId, onSelectBlock }) => {
+}> = React.memo(({ node, inputLayoutMode = 'auto', selectedLineNumber, selectedBlockId, onSelectBlock }) => {
   const theme = MCREATOR_CATEGORY_THEMES[node.category] || MCREATOR_CATEGORY_THEMES.math;
   const isSelected = checkIsNodeSelected(node, selectedLineNumber, selectedBlockId);
   const isExternal = shouldUseExternalInputs(node, inputLayoutMode);
@@ -2340,7 +2340,7 @@ const InlineValueBlock: React.FC<{
       )}
     </div>
   );
-};
+});
 
 /* -------------------------------------------------------------------------- */
 /*                     Tree AST Inspector Fallback View                       */
@@ -2351,7 +2351,7 @@ const TreeASTInspector: React.FC<{
   selectedLineNumber?: number | null;
   selectedBlockId?: string | null;
   onSelectBlock?: (blockId: string, sourceLine?: number) => void;
-}> = ({ node, selectedLineNumber, selectedBlockId, onSelectBlock }) => {
+}> = React.memo(({ node, selectedLineNumber, selectedBlockId, onSelectBlock }) => {
   const isSelected = checkIsNodeSelected(node, selectedLineNumber, selectedBlockId);
 
   return (
@@ -2438,4 +2438,4 @@ const TreeASTInspector: React.FC<{
       )}
     </div>
   );
-};
+});

@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import { Play, Trash2, Code2, AlertCircle, Sparkles, Navigation } from 'lucide-react';
 import { MCreatorElementType } from '../types';
+import { CustomDropdown } from './CustomDropdown';
 
 interface JavaEditorPanelProps {
   code: string;
@@ -179,18 +180,16 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
 
         {elementType === 'procedure' && (
           <div className="flex items-center space-x-2">
-            <label className="text-[11px] text-[#A39B8E] font-medium">Event Listener:</label>
-            <select
+            <span className="text-[11px] text-[#A39B8E] font-medium">Event Listener:</span>
+            <CustomDropdown
               value={targetEvent}
-              onChange={(e) => onChangeTargetEvent(e.target.value)}
-              className="bg-[#1C1A17] border border-[#3B342E] text-[#FAF6F0] rounded px-2 py-1 text-xs outline-none focus:border-[#CEB098] cursor-pointer"
-            >
-              {EVENT_TRIGGERS.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
+              onChange={onChangeTargetEvent}
+              align="right"
+              options={EVENT_TRIGGERS.map((t) => ({
+                value: t.id,
+                label: t.label,
+              }))}
+            />
           </div>
         )}
       </div>

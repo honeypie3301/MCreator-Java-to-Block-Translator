@@ -50,9 +50,9 @@ Common MCreator Blockly Blocks:
    - math_number (<field name="NUM">10</field>)
    - math_java_constants (<field name="CONSTANT">RANDOM</field>)
 3. Entity Actions:
-   - entity_send_chat (<value name="text"><block type="text">...</block></value><value name="entity"><block type="entity_from_deps"></block></value>)
-   - entity_deal_custom_damage (<value name="amount">...</value><value name="entity">...</value>)
-   - entity_add_potion_effect (<value name="potion">...</value><value name="level">...</value><value name="duration">...</value><value name="entity">...</value>)
+   - entity_send_chat (<value name="text"><block type="text">...</block></value><value name="actbar"><block type="logic_boolean"><field name="BOOL">FALSE</field></block></value><value name="entity"><block type="entity_from_deps"></block></value>)
+   - deal_damage (<value name="amount">...</value><value name="entity">...</value><value name="damagesource">...</value>)
+   - entity_add_potion (<field name="potion">regeneration</field><value name="level">...</value><value name="duration">...</value><value name="entity">...</value>)
    - entity_set_health (<value name="health">...</value><value name="entity">...</value>)
    - entity_from_deps
    - source_entity_from_deps
@@ -61,8 +61,8 @@ Common MCreator Blockly Blocks:
    - coord_x, coord_y, coord_z
    - world_data_isremote (returns boolean)
    - world_send_chat
-   - play_sound (<field name="sound">...</field>)
-   - spawn_particle (<field name="particle">...</field>)
+   - play_sound (<field name="sound">...</field><field name="soundcategory">ambient</field><value name="x">...</value><value name="y">...</value><value name="z">...</value><value name="level">...</value><value name="pitch">...</value>)
+   - spawn_particle (<field name="particle">...</field><value name="x">...</value><value name="y">...</value><value name="z">...</value><value name="xs">...</value><value name="ys">...</value><value name="zs">...</value>)
    - block_add (<value name="block">...</value><value name="x">...</value><value name="y">...</value><value name="z">...</value>)
 5. Variables:
    - variables_get_number, variables_set_number

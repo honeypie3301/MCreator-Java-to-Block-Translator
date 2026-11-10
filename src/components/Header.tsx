@@ -1,6 +1,7 @@
 import React from 'react';
 import { Blocks, Download, Copy, Check, RefreshCw, Layers } from 'lucide-react';
 import { MCreatorElementType, NeoForgeVersion } from '../types';
+import { CustomDropdown } from './CustomDropdown';
 
 interface HeaderProps {
   elementType: MCreatorElementType;
@@ -54,46 +55,31 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Selectors & Actions */}
       <div className="flex items-center flex-wrap gap-2 text-xs">
         {/* Element Type Selector (.ptpl, .aitpl, .cmdtpl, .ftpl) */}
-        <div className="flex items-center space-x-1.5 bg-[#1F1C19] border border-[#3B342E] rounded-md px-2.5 py-1">
-          <Layers className="w-3.5 h-3.5 text-[#CEB098] shrink-0" />
-          <select
-            value={elementType}
-            onChange={(e) => onChangeElementType(e.target.value as MCreatorElementType)}
-            className="bg-transparent text-[#FAF6F0] outline-none text-xs cursor-pointer font-medium"
-            title="Target MCreator Blockly Element Type"
-          >
-            <option value="procedure" className="bg-[#1C1A17] text-[#FAF6F0]">
-              Procedure (.ptpl)
-            </option>
-            <option value="ai_task" className="bg-[#1C1A17] text-[#FAF6F0]">
-              AI Goal / Task (.aitpl)
-            </option>
-            <option value="command" className="bg-[#1C1A17] text-[#FAF6F0]">
-              Command Execution (.cmdtpl)
-            </option>
-            <option value="feature" className="bg-[#1C1A17] text-[#FAF6F0]">
-              Worldgen Feature (.ftpl)
-            </option>
-          </select>
-        </div>
+        <CustomDropdown<MCreatorElementType>
+          value={elementType}
+          onChange={onChangeElementType}
+          icon={<Layers className="w-3.5 h-3.5 text-[#CEB098] shrink-0" />}
+          align="left"
+          options={[
+            { value: 'procedure', label: 'Procedure (.ptpl)', description: 'Event listener & procedural logic' },
+            { value: 'ai_task', label: 'AI Goal / Task (.aitpl)', description: 'Entity AI pathfinding & behavior' },
+            { value: 'command', label: 'Command (.cmdtpl)', description: 'Chat & console command listener' },
+            { value: 'feature', label: 'Feature (.ftpl)', description: 'Worldgen feature placement' },
+          ]}
+        />
 
         {/* NeoForge Version Selector */}
-        <div className="flex items-center space-x-1.5 bg-[#1F1C19] border border-[#3B342E] rounded-md px-2.5 py-1">
-          <span className="text-[10px] font-mono text-[#A39B8E]">NeoForge:</span>
-          <select
-            value={neoForgeVersion}
-            onChange={(e) => onChangeNeoForgeVersion(e.target.value as NeoForgeVersion)}
-            className="bg-transparent text-[#CEB098] outline-none text-xs font-mono font-semibold cursor-pointer"
-            title="NeoForge Target Version Syntax"
-          >
-            <option value="1.21.1" className="bg-[#1C1A17] text-[#FAF6F0]">
-              1.21.1
-            </option>
-            <option value="26.1.2" className="bg-[#1C1A17] text-[#FAF6F0]">
-              26.1.2
-            </option>
-          </select>
-        </div>
+        <CustomDropdown<NeoForgeVersion>
+          value={neoForgeVersion}
+          onChange={onChangeNeoForgeVersion}
+          prefix="NeoForge:"
+          mono
+          align="right"
+          options={[
+            { value: '1.21.1', label: '1.21.1', description: 'Standard NeoForge 1.21.1 LTS syntax' },
+            { value: '26.1.2', label: '26.1.2', description: 'MCreator 2026.1 modern syntax' },
+          ]}
+        />
 
         {/* Actions */}
         {hasResult && (

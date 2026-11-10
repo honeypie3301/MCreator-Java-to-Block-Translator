@@ -48,21 +48,42 @@ export function translateJavaToMCreator(
   let activeBody = '';
   let activeMethod: DetectedMethod | undefined;
 
+  // Find candidate execute methods that contain real logic (not just 1-line delegators)
+  const executeMethods = detectedMethods.filter(m => m.name === 'execute');
+  const realExecuteMethod = executeMethods.length > 0
+    ? [...executeMethods].sort((a, b) => b.body.length - a.body.length)[0]
+    : undefined;
+
+  let bridgeTrigger: string | undefined;
+
   if (detectedMethods.length > 0) {
     if (activeMethodName) {
       activeMethod = detectedMethods.find(m => m.signature === activeMethodName || m.name === activeMethodName);
     }
+
+    // Check if the selected method is merely an MCreator event bridge or delegator calling execute(...)
+    // e.g. "onPlayerTick" that only contains "execute(event, event.getEntity());" or "execute(null, entity);"
+    const isDelegator = activeMethod && (
+      /^execute\s*\([\s\S]*?\);?$/.test(activeMethod.body.trim().replace(/\/\/.*$/gm, '').trim())
+    );
+
+    if (isDelegator && realExecuteMethod && realExecuteMethod.body.length > activeMethod.body.length) {
+      // Inherit the event trigger from the subscriber method if it had one
+      if (activeMethod.eventTrigger) {
+        bridgeTrigger = activeMethod.eventTrigger;
+      }
+      activeMethod = realExecuteMethod;
+    }
+
     if (!activeMethod) {
-      // Prioritize execute(...) with largest real implementation body
-      const executeMethods = detectedMethods.filter(m => m.name === 'execute');
-      if (executeMethods.length > 0) {
-        activeMethod = [...executeMethods].sort((a, b) => b.body.length - a.body.length)[0];
+      if (realExecuteMethod && realExecuteMethod.body.length > 20) {
+        activeMethod = realExecuteMethod;
+      } else {
+        // Prioritize method with largest body
+        activeMethod = [...detectedMethods].sort((a, b) => b.body.length - a.body.length)[0];
       }
     }
-    if (!activeMethod) {
-      // Prioritize method with largest body
-      activeMethod = [...detectedMethods].sort((a, b) => b.body.length - a.body.length)[0];
-    }
+
     if (activeMethod) {
       activeMethodName = activeMethod.signature;
       activeBody = activeMethod.body;
@@ -80,7 +101,9 @@ export function translateJavaToMCreator(
     : 'no_ext_trigger';
 
   if (elementType === 'procedure') {
-    if (activeMethod?.eventTrigger && (!userEventOverride || userEventOverride === 'auto')) {
+    if (bridgeTrigger && (!userEventOverride || userEventOverride === 'auto')) {
+      detectedEventTrigger = bridgeTrigger;
+    } else if (activeMethod?.eventTrigger && (!userEventOverride || userEventOverride === 'auto')) {
       detectedEventTrigger = activeMethod.eventTrigger;
     } else if (code.includes('PlayerTickEvent') || code.includes('onPlayerTick') || code.includes('player_ticks')) {
       detectedEventTrigger = 'player_ticks';
@@ -1385,6 +1408,9 @@ function parseJavaStatementInternal(
         { name: 'x', block: parseExpressionToAST(px, idSeq * 10 + 1) },
         { name: 'y', block: parseExpressionToAST(py, idSeq * 10 + 2) },
         { name: 'z', block: parseExpressionToAST(pz, idSeq * 10 + 3) },
+        { name: 'xs', block: { id: `xs_${idSeq}`, type: 'math_number', category: 'math', title: '0', fields: { NUM: '0' } } },
+        { name: 'ys', block: { id: `ys_${idSeq}`, type: 'math_number', category: 'math', title: '1', fields: { NUM: '1' } } },
+        { name: 'zs', block: { id: `zs_${idSeq}`, type: 'math_number', category: 'math', title: '0', fields: { NUM: '0' } } },
       ],
     };
   }
@@ -1403,6 +1429,7 @@ function parseJavaStatementInternal(
       type: 'explode',
       category: 'world',
       title: 'Explode',
+      fields: { mode: 'NONE' },
       values: [
         { name: 'power', block: parseExpressionToAST(pPower, idSeq * 10 + 1) },
         { name: 'x', block: parseExpressionToAST(px, idSeq * 10 + 2) },
@@ -1545,7 +1572,7 @@ function parseJavaStatementInternal(
       type: 'play_sound',
       category: 'world',
       title: 'Play sound',
-      fields: { sound: soundName, category: params[6] ? params[6].replace(/"/g, '') : 'ambient' },
+      fields: { sound: soundName, soundcategory: params[6] ? params[6].replace(/"/g, '') : 'ambient' },
       values: [
         { name: 'x', block: parseExpressionToAST(params[1] || 'x', idSeq * 10 + 1) },
         { name: 'y', block: parseExpressionToAST(params[2] || 'y', idSeq * 10 + 2) },
@@ -1580,6 +1607,7 @@ function parseJavaStatementInternal(
     const potType = potMatch ? potMatch[1].trim() : 'MobEffects.REGENERATION';
     const durExpr = potMatch ? potMatch[2].trim() : '60';
     const lvlExpr = potMatch && potMatch[3] ? potMatch[3].trim() : '0';
+    const cleanPot = potType.replace(/MobEffects\./, '').toLowerCase();
 
     breakdown.push({ javaLine: stmt, mcreatorBlock: 'entity_add_potion', explanation: 'Add potion effect to entity' });
     return {
@@ -1587,11 +1615,11 @@ function parseJavaStatementInternal(
       type: 'entity_add_potion',
       category: 'action',
       title: 'Add potion effect',
+      fields: { potion: cleanPot },
       values: [
-        { name: 'entity', block: { id: `ent_${idSeq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' } },
-        { name: 'potion', block: { id: `pot_${idSeq}`, type: 'text', category: 'action', title: potType, fields: { TEXT: potType } } },
         { name: 'level', block: parseExpressionToAST(lvlExpr, idSeq * 10 + 1) },
         { name: 'duration', block: parseExpressionToAST(durExpr, idSeq * 10 + 2) },
+        { name: 'entity', block: { id: `ent_${idSeq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' } },
       ],
     };
   }
@@ -1841,6 +1869,7 @@ function parseJavaStatementInternal(
       title: 'Send Chat Message',
       values: [
         { name: 'text', block: parseExpressionToAST(msg, idSeq * 10 + 1) },
+        { name: 'actbar', block: { id: `actbar_${idSeq}`, type: 'logic_boolean', category: 'logic', title: 'false', fields: { BOOL: 'FALSE' } } },
         { name: 'entity', block: { id: `ent_${idSeq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' } },
       ],
     };

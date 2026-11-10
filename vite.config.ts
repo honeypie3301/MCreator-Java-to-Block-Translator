@@ -66,10 +66,19 @@ function aistudioMediaPlugin(): Plugin {
 
 export default defineConfig(() => {
   return {
-    base: process.env.GITHUB_ACTIONS === 'true' || process.env.DEPLOY_TARGET === 'gh-pages'
-      ? '/MCreator-Block-Translator/'
-      : './',
+    base: './',
     plugins: [react(), tailwindcss(), aistudioMediaPlugin()],
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom'],
+            'vendor-motion': ['motion', 'lucide-react'],
+          },
+        },
+      },
+      chunkSizeWarningLimit: 1200,
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
