@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="puzzleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38a169"/>
+      <stop offset="100%" stop-color="#22543d"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+  <!-- Background Rounded Rect -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#1e222b" stroke="#2e3440" stroke-width="2"/>
+  
+  <!-- Blockly Puzzle Block -->
+  <path d="M 12 18 
+           H 24 
+           C 24 13, 32 13, 32 18 
+           H 52 
+           A 4 4 0 0 1 56 22 
+           V 34 
+           C 51 34, 51 42, 56 42 
+           V 50 
+           A 4 4 0 0 1 52 54 
+           H 32 
+           C 32 49, 24 49, 24 54 
+           H 12 
+           A 4 4 0 0 1 8 50 
+           V 22 
+           A 4 4 0 0 1 12 18 Z" 
+        fill="url(#puzzleGrad)" 
+        stroke="#48bb78" 
+        stroke-width="1.5"
+        filter="url(#shadow)"/>
+        
+  <!-- Letter M in Blockly Font -->
+  <text x="32" y="40" 
+        font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" 
+        font-size="20" 
+        font-weight="900" 
+        fill="#ffffff" 
+        text-anchor="middle" 
+        alignment-baseline="middle">M</text>
+</svg>

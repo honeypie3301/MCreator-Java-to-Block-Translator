@@ -23,9 +23,9 @@ interface VisualBlockCanvasProps {
   ast?: BlockASTNode;
   eventTrigger?: string;
   procedureName?: string;
-  selectedLineNumber?: number | null;
-  selectedBlockId?: string | null;
-  onSelectBlock?: (blockId: string, sourceLine?: number) => void;
+  
+  
+  
 }
 
 // Color palette extracted directly from MCreator 2026.1 Blockly source & UI
@@ -288,18 +288,7 @@ function shouldUseExternalInputs(node: BlockASTNode, layoutMode: string = 'auto'
   return complexity.maxDepth >= 2 || complexity.textLen > 35 || complexity.count >= 4;
 }
 
-function checkIsNodeSelected(
-  node: BlockASTNode,
-  selectedLineNumber?: number | null,
-  selectedBlockId?: string | null
-): boolean {
-  if (selectedBlockId && node.id === selectedBlockId) return true;
-  if (selectedLineNumber !== undefined && selectedLineNumber !== null && node.sourceLine !== undefined) {
-    if (node.sourceEndLine !== undefined) {
-      return node.sourceLine <= selectedLineNumber && selectedLineNumber <= node.sourceEndLine;
-    }
-    return node.sourceLine === selectedLineNumber;
-  }
+function checkIsNodeSelected(): boolean {
   return false;
 }
 
@@ -588,9 +577,6 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
             </span>
           ))}
         </div>
-        <span className="text-[10px] text-[#81a1c1] font-mono">
-          Click any block to navigate to its Java source line
-        </span>
       </div>
     </div>
   );
@@ -604,9 +590,9 @@ const BlocklyNodeRenderer: React.FC<{
   node: BlockASTNode;
   eventTrigger?: string;
   inputLayoutMode?: 'auto' | 'inline' | 'external';
-  selectedLineNumber?: number | null;
-  selectedBlockId?: string | null;
-  onSelectBlock?: (blockId: string, sourceLine?: number) => void;
+  
+  
+  
 }> = React.memo(({ node, eventTrigger, inputLayoutMode = 'auto', selectedLineNumber, selectedBlockId, onSelectBlock }) => {
   const theme = MCREATOR_CATEGORY_THEMES[node.category] || MCREATOR_CATEGORY_THEMES.control;
   const isSelected = checkIsNodeSelected(node, selectedLineNumber, selectedBlockId);
@@ -629,10 +615,9 @@ const BlocklyNodeRenderer: React.FC<{
         ref={nodeRef}
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`flex flex-col items-start font-sans cursor-pointer transition-all ${
-          isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
+          isSelected ? '' : ''
         }`}
       >
         {/* Banner Shape */}
@@ -710,10 +695,9 @@ const BlocklyNodeRenderer: React.FC<{
         ref={nodeRef}
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all ${
-          isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded-md shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
+          isSelected ? '' : ''
         }`}
       >
         {/* C-Block Header Bar */}
@@ -968,18 +952,19 @@ const BlocklyNodeRenderer: React.FC<{
     node.type === 'variables_set_itemstack'
   ) {
     const valBlock = node.values?.find(v => v.name === 'VAL')?.block;
+    const entityBlock = node.values?.find(v => v.name === 'entity')?.block;
     const typeLabel = node.type.replace('variables_set_', '');
-    const varName = node.fields?.VAR?.replace('local:', '') || 'var';
+    const isGlobal = (node.fields?.VAR || '').startsWith('global:');
+    const varName = (node.fields?.VAR || '').replace(/^(local:|global:)/, '') || 'var';
 
     return (
       <div
         ref={nodeRef}
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all ${
-          isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded-md shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
+          isSelected ? '' : ''
         }`}
       >
         <div
@@ -991,7 +976,7 @@ const BlocklyNodeRenderer: React.FC<{
         >
           <span className="font-bold text-[11px]">Set {typeLabel}</span>
           <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
-            Local: {varName} <ChevronDown className="w-3 h-3 opacity-70" />
+            {isGlobal ? 'Global: ' : 'Local: '}{varName} <ChevronDown className="w-3 h-3 opacity-70" />
           </span>
           <span className="font-bold text-[11px]">to:</span>
           {valBlock ? (
@@ -1003,6 +988,23 @@ const BlocklyNodeRenderer: React.FC<{
             />
           ) : (
             <span className="text-white/40 text-[9px] italic">🧩 &lt;value&gt;</span>
+          )}
+          {isGlobal && (
+            <>
+              <span className="font-bold text-[11px] ml-1">for entity:</span>
+              {entityBlock ? (
+                <InlineValueBlock
+                  node={entityBlock}
+                  selectedLineNumber={selectedLineNumber}
+                  selectedBlockId={selectedBlockId}
+                  onSelectBlock={onSelectBlock}
+                />
+              ) : (
+                <span className="bg-[#4682B4] text-white text-[10px] font-medium px-2 py-0.5 rounded">
+                  Event/target entity
+                </span>
+              )}
+            </>
           )}
           {node.sourceLine && (
             <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
@@ -1038,10 +1040,9 @@ const BlocklyNodeRenderer: React.FC<{
         ref={nodeRef}
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all ${
-          isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded-md shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
+          isSelected ? '' : ''
         }`}
       >
         <div
@@ -1098,10 +1099,9 @@ const BlocklyNodeRenderer: React.FC<{
         ref={nodeRef}
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all ${
-          isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded-md shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
+          isSelected ? '' : ''
         }`}
       >
         <div
@@ -1210,10 +1210,9 @@ const BlocklyNodeRenderer: React.FC<{
         ref={nodeRef}
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all ${
-          isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded-md shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
+          isSelected ? '' : ''
         }`}
       >
         <div
@@ -1349,10 +1348,9 @@ const BlocklyNodeRenderer: React.FC<{
         ref={nodeRef}
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all ${
-          isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded-md shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
+          isSelected ? '' : ''
         }`}
       >
         <div
@@ -1491,10 +1489,9 @@ const BlocklyNodeRenderer: React.FC<{
         ref={nodeRef}
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all ${
-          isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded-md shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
+          isSelected ? '' : ''
         }`}
       >
         <div
@@ -1608,10 +1605,9 @@ const BlocklyNodeRenderer: React.FC<{
         ref={nodeRef}
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all ${
-          isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded-md shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
+          isSelected ? '' : ''
         }`}
       >
         <div
@@ -1669,10 +1665,9 @@ const BlocklyNodeRenderer: React.FC<{
         ref={nodeRef}
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all ${
-          isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded-md shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
+          isSelected ? '' : ''
         }`}
       >
         <div
@@ -1718,10 +1713,9 @@ const BlocklyNodeRenderer: React.FC<{
         ref={nodeRef}
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all ${
-          isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded-md shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
+          isSelected ? '' : ''
         }`}
       >
         <div
@@ -1781,10 +1775,9 @@ const BlocklyNodeRenderer: React.FC<{
         ref={nodeRef}
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all ${
-          isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded-md shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
+          isSelected ? '' : ''
         }`}
       >
         <div
@@ -1828,10 +1821,9 @@ const BlocklyNodeRenderer: React.FC<{
         ref={nodeRef}
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all ${
-          isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
+          isSelected ? '' : ''
         }`}
       >
         <div
@@ -1905,10 +1897,9 @@ const BlocklyNodeRenderer: React.FC<{
         ref={nodeRef}
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all ${
-          isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
+          isSelected ? '' : ''
         }`}
       >
         <div
@@ -1958,10 +1949,9 @@ const BlocklyNodeRenderer: React.FC<{
       ref={nodeRef}
       onClick={(e) => {
         e.stopPropagation();
-        onSelectBlock?.(node.id, node.sourceLine);
       }}
       className={`flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all ${
-        isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded-md shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
+        isSelected ? '' : ''
       }`}
     >
       <div
@@ -2071,9 +2061,9 @@ const BlocklyNodeRenderer: React.FC<{
 const InlineValueBlock: React.FC<{
   node: BlockASTNode;
   inputLayoutMode?: 'auto' | 'inline' | 'external';
-  selectedLineNumber?: number | null;
-  selectedBlockId?: string | null;
-  onSelectBlock?: (blockId: string, sourceLine?: number) => void;
+  
+  
+  
 }> = React.memo(({ node, inputLayoutMode = 'auto', selectedLineNumber, selectedBlockId, onSelectBlock }) => {
   const theme = MCREATOR_CATEGORY_THEMES[node.category] || MCREATOR_CATEGORY_THEMES.math;
   const isSelected = checkIsNodeSelected(node, selectedLineNumber, selectedBlockId);
@@ -2086,11 +2076,10 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-1.5 py-0.5 rounded font-mono font-bold text-[10px] shadow-xs border cursor-pointer shrink-0 ${
           isTrue ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300' : 'bg-red-950/80 border-red-500/50 text-red-300'
-        } ${isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''}`}
+        } ${isSelected ? '' : ''}`}
       >
         {isTrue ? 'TRUE' : 'FALSE'}
       </div>
@@ -2103,10 +2092,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2.5 py-0.5 rounded-full font-sans font-bold text-[11px] text-white shadow-xs border cursor-pointer shrink-0 ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: '#5b67a5', borderColor: '#485387' }}
       >
@@ -2122,10 +2110,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2 py-0.5 rounded font-mono font-medium text-[11px] text-white shadow-xs flex items-center gap-1 cursor-pointer shrink-0 border ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: '#5ba55b', borderColor: '#4d8c4d' }}
       >
@@ -2136,30 +2123,50 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Variables Getter: Get number [Local: var ▾]
+  // Variables Getter: Get number [Local/Global: var ▾] (for entity: [entity])
   if (
     node.type === 'variables_get_number' ||
     node.type === 'variables_get_logic' ||
     node.type === 'variables_get_string' ||
     node.type === 'variables_get_itemstack'
   ) {
-    const varName = node.fields?.VAR?.replace('local:', '') || node.title || 'var';
+    const rawVar = node.fields?.VAR || node.title || 'var';
+    const isGlobal = rawVar.startsWith('global:');
+    const varName = rawVar.replace(/^(?:local|global):/, '');
     const typeLabel = node.type.replace('variables_get_', '');
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+
     return (
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: '#a55b80', borderColor: '#874867' }}
       >
         <span className="font-medium text-[10.5px] text-white/95">Get {typeLabel}</span>
         <span className="bg-white/95 text-[#14171d] font-bold px-1.5 py-0.2 rounded text-[10.5px] flex items-center gap-1 shadow-xs">
-          Local: {varName} <ChevronDown className="w-2.5 h-2.5 opacity-70" />
+          {isGlobal ? `Global: ${varName}` : `Local: ${varName}`} <ChevronDown className="w-2.5 h-2.5 opacity-70" />
         </span>
+        {isGlobal && (
+          <>
+            <span className="font-medium text-[10.5px] text-white/95">for entity:</span>
+            {entBlock ? (
+              <InlineValueBlock
+                node={entBlock}
+                selectedLineNumber={selectedLineNumber}
+                selectedBlockId={selectedBlockId}
+                onSelectBlock={onSelectBlock}
+              />
+            ) : (
+              <div className="bg-[#5ba58c] text-white px-1.5 py-0.2 rounded shadow-sm font-semibold border border-[#48836f] text-[10px]">
+                Event/target entity
+              </div>
+            )}
+          </>
+        )}
       </div>
     );
   }
@@ -2172,10 +2179,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
       >
@@ -2212,10 +2218,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
       >
@@ -2243,10 +2248,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: '#5b67a5', borderColor: '#485387' }}
       >
@@ -2264,10 +2268,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: '#5b80a5', borderColor: '#486887' }}
       >
@@ -2290,10 +2293,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: '#5b80a5', borderColor: '#486887' }}
       >
@@ -2329,10 +2331,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2 py-0.5 rounded text-white font-sans font-semibold text-[11px] shadow-xs border cursor-pointer shrink-0 ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
       >
@@ -2349,10 +2350,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: '#5b80a5', borderColor: '#486887' }}
       >
@@ -2381,10 +2381,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: '#5b67a5', borderColor: '#485285' }}
       >
@@ -2415,10 +2414,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2 py-1 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 flex-wrap ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: '#4a6b82', borderColor: '#354f61' }}
       >
@@ -2446,10 +2444,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2 py-1 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: '#4a6b82', borderColor: '#354f61' }}
       >
@@ -2468,8 +2465,8 @@ const InlineValueBlock: React.FC<{
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
     return (
       <div
-        onClick={(e) => { e.stopPropagation(); onSelectBlock?.(node.id, node.sourceLine); }}
-        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''}`}
+        onClick={(e) => { e.stopPropagation(); }}
+        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${isSelected ? '' : ''}`}
         style={{ backgroundColor: '#3d6b8c', borderColor: '#2e5570' }}
       >
         <span className="font-semibold text-[10px]">ID of dimension</span>
@@ -2483,8 +2480,8 @@ const InlineValueBlock: React.FC<{
     const dimName = (node.fields?.dimension || node.title || 'Dimension').replace(/^CUSTOM:/, '');
     return (
       <div
-        onClick={(e) => { e.stopPropagation(); onSelectBlock?.(node.id, node.sourceLine); }}
-        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''}`}
+        onClick={(e) => { e.stopPropagation(); }}
+        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${isSelected ? '' : ''}`}
         style={{ backgroundColor: '#2a5c40', borderColor: '#1d4330' }}
       >
         <span className="font-semibold text-[10px]">Dimension type:</span>
@@ -2499,8 +2496,8 @@ const InlineValueBlock: React.FC<{
     const bBlock = node.values?.find(v => v.name === 'b')?.block;
     return (
       <div
-        onClick={(e) => { e.stopPropagation(); onSelectBlock?.(node.id, node.sourceLine); }}
-        className={`px-2 py-1 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer flex-wrap ${isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''}`}
+        onClick={(e) => { e.stopPropagation(); }}
+        className={`px-2 py-1 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer flex-wrap ${isSelected ? '' : ''}`}
         style={{ backgroundColor: '#2d4a35', borderColor: '#1e3524' }}
       >
         {aBlock && <InlineValueBlock node={aBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
@@ -2511,13 +2508,65 @@ const InlineValueBlock: React.FC<{
     );
   }
 
+  // Entity check game mode: entity_checkgamemode
+  if (node.type === 'entity_checkgamemode') {
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    const mode = node.fields?.gamemode || 'SPECTATOR';
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); }}
+        className={`px-2 py-1 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${isSelected ? '' : ''}`}
+        style={{ backgroundColor: '#3d6b8c', borderColor: '#2e5570' }}
+      >
+        <span className="font-semibold text-[10.5px]">Is</span>
+        {entBlock ? (
+          <InlineValueBlock node={entBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+        ) : (
+          <div className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#48836f] text-[10px]">
+            Event/target entity
+          </div>
+        )}
+        <span className="font-semibold text-[10.5px]">in game mode</span>
+        <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[10.5px] flex items-center gap-1 shadow-xs">
+          {mode} <ChevronDown className="w-3 h-3 opacity-70" />
+        </span>
+      </div>
+    );
+  }
+
+  // Entity has item in inventory: entity_has_item_inventory
+  if (node.type === 'entity_has_item_inventory') {
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    const itemBlock = node.values?.find(v => v.name === 'item')?.block;
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); }}
+        className={`px-2 py-1 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${isSelected ? '' : ''}`}
+        style={{ backgroundColor: '#3d6b8c', borderColor: '#2e5570' }}
+      >
+        <span className="font-semibold text-[10.5px]">Has</span>
+        {entBlock ? (
+          <InlineValueBlock node={entBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+        ) : (
+          <div className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#48836f] text-[10px]">
+            Event/target entity
+          </div>
+        )}
+        <span className="font-semibold text-[10.5px]">in inventory</span>
+        {itemBlock && (
+          <InlineValueBlock node={itemBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+        )}
+      </div>
+    );
+  }
+
   // Entity food level block: entity_foodlevel / entity_get_food_level
   if (node.type === 'entity_foodlevel' || node.type === 'entity_get_food_level') {
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
     return (
       <div
-        onClick={(e) => { e.stopPropagation(); onSelectBlock?.(node.id, node.sourceLine); }}
-        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''}`}
+        onClick={(e) => { e.stopPropagation(); }}
+        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${isSelected ? '' : ''}`}
         style={{ backgroundColor: '#7c4b1a', borderColor: '#5c3612' }}
       >
         <span className="font-semibold text-[10px]">Get food level of</span>
@@ -2532,10 +2581,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2 py-0.5 rounded text-white font-sans font-semibold text-[11px] shadow-xs border cursor-pointer shrink-0 ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
       >
@@ -2551,10 +2599,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2 py-0.5 rounded text-white font-mono font-bold text-[11px] shadow-xs border cursor-pointer shrink-0 ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: '#5b80a5', borderColor: '#486887' }}
       >
@@ -2570,10 +2617,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2 py-0.5 rounded font-semibold text-[10px] bg-emerald-950/70 border border-emerald-400/50 text-emerald-200 shadow-xs flex items-center gap-1 cursor-pointer shrink-0 ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
       >
         <span>📦</span>
@@ -2588,10 +2634,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] bg-cyan-950/70 border border-cyan-400/50 text-cyan-200 shadow-xs cursor-pointer shrink-0 ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
       >
         Itemstack iterator
@@ -2607,10 +2652,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 transition-all ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md scale-[1.02]' : 'hover:brightness-110'
+          isSelected ? ' scale-[1.02]' : 'hover:brightness-110'
         }`}
         style={{ backgroundColor: '#7b5ba5', borderColor: '#654887' }}
         title="Custom code snippet (Expression/Value)"
@@ -2652,10 +2696,9 @@ const InlineValueBlock: React.FC<{
         <div
           onClick={(e) => {
             e.stopPropagation();
-            onSelectBlock?.(node.id, node.sourceLine);
           }}
           className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
-            isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+            isSelected ? '' : ''
           }`}
           style={{ backgroundColor: theme.headerBg, borderColor: theme.border }}
         >
@@ -2668,10 +2711,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 flex-wrap max-w-full ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: theme.headerBg, borderColor: theme.border }}
       >
@@ -2781,10 +2823,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2 py-1 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 flex-wrap max-w-full ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: paramBg, borderColor: paramBorder }}
       >
@@ -2824,10 +2865,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-1.5 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1 shadow-xs border cursor-pointer shrink-0 ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: '#2e6b52', borderColor: '#1d4736' }}
       >
@@ -2867,10 +2907,9 @@ const InlineValueBlock: React.FC<{
         <div
           onClick={(e) => {
             e.stopPropagation();
-            onSelectBlock?.(node.id, node.sourceLine);
           }}
           className={`p-1.5 rounded text-white font-sans text-[11px] flex flex-col gap-1 shadow-xs border cursor-pointer max-w-full ${
-            isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+            isSelected ? '' : ''
           }`}
           style={{ backgroundColor: theme.headerBg, borderColor: theme.border }}
         >
@@ -2908,10 +2947,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-1.5 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1 shadow-xs border cursor-pointer shrink-0 ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: theme.headerBg, borderColor: theme.border }}
       >
@@ -2952,10 +2990,9 @@ const InlineValueBlock: React.FC<{
         <div
           onClick={(e) => {
             e.stopPropagation();
-            onSelectBlock?.(node.id, node.sourceLine);
           }}
           className={`rounded text-white font-sans text-[11px] flex flex-col shadow-xs border cursor-pointer max-w-full overflow-hidden ${
-            isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+            isSelected ? '' : ''
           }`}
           style={{ backgroundColor: theme.headerBg, borderColor: theme.border }}
         >
@@ -2998,10 +3035,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-2 py-1 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: theme.headerBg, borderColor: theme.border }}
       >
@@ -3047,10 +3083,9 @@ const InlineValueBlock: React.FC<{
       <div
         onClick={(e) => {
           e.stopPropagation();
-          onSelectBlock?.(node.id, node.sourceLine);
         }}
         className={`px-1.5 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1 shadow-xs border flex-wrap cursor-pointer shrink-0 ${
-          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+          isSelected ? '' : ''
         }`}
         style={{ backgroundColor: theme.headerBg, borderColor: theme.border }}
       >
@@ -3165,10 +3200,9 @@ const InlineValueBlock: React.FC<{
     <div
       onClick={(e) => {
         e.stopPropagation();
-        onSelectBlock?.(node.id, node.sourceLine);
       }}
       className={`px-1.5 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1 shadow-xs border flex-wrap cursor-pointer shrink-0 ${
-        isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+        isSelected ? '' : ''
       }`}
       style={{
         backgroundColor: theme.headerBg,
@@ -3226,9 +3260,9 @@ const InlineValueBlock: React.FC<{
 
 const TreeASTInspector: React.FC<{
   node: BlockASTNode;
-  selectedLineNumber?: number | null;
-  selectedBlockId?: string | null;
-  onSelectBlock?: (blockId: string, sourceLine?: number) => void;
+  
+  
+  
 }> = React.memo(({ node, selectedLineNumber, selectedBlockId, onSelectBlock }) => {
   const isSelected = checkIsNodeSelected(node, selectedLineNumber, selectedBlockId);
 
@@ -3236,11 +3270,10 @@ const TreeASTInspector: React.FC<{
     <div
       onClick={(e) => {
         e.stopPropagation();
-        onSelectBlock?.(node.id, node.sourceLine);
       }}
       className={`font-mono text-xs p-3 rounded border transition-all cursor-pointer ${
         isSelected
-          ? 'bg-amber-950/40 border-amber-400 ring-2 ring-amber-400 text-amber-200'
+          ? ''
           : 'bg-[#181a20] border-[#2b303c] text-[#d8dee9] hover:border-[#4c566a]'
       } space-y-1.5`}
     >

@@ -44,9 +44,6 @@ export default function App() {
   const [copied, setCopied] = useState<boolean>(false);
   const [selectedMethod, setSelectedMethod] = useState<string | undefined>(undefined);
 
-  // Line and Block Selection for Cross-Component Highlighting
-  const [selectedLineNumber, setSelectedLineNumber] = useState<number | null>(null);
-  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
 
   // "Already Converted" Popup State
   const [showAlreadyConvertedToast, setShowAlreadyConvertedToast] = useState<boolean>(false);
@@ -96,8 +93,6 @@ export default function App() {
     setLastConvertedCode('');
     setResult(null);
     setError(null);
-    setSelectedLineNumber(null);
-    setSelectedBlockId(null);
   };
 
   // Copy XML to clipboard
@@ -124,17 +119,6 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  // Selection handlers
-  const handleSelectLine = (lineNumber: number) => {
-    setSelectedLineNumber(lineNumber);
-  };
-
-  const handleSelectBlock = (blockId: string, sourceLine?: number) => {
-    setSelectedBlockId(blockId);
-    if (sourceLine) {
-      setSelectedLineNumber(sourceLine);
-    }
-  };
 
   // Auto-translate on initial load and change of element type or version
   const isFirstMount = React.useRef(true);
@@ -320,9 +304,6 @@ export default function App() {
                     ast={result.visualAST}
                     eventTrigger={result.eventTrigger}
                     procedureName={result.procedureName}
-                    selectedLineNumber={selectedLineNumber}
-                    selectedBlockId={selectedBlockId}
-                    onSelectBlock={handleSelectBlock}
                   />
                 )}
 
@@ -342,8 +323,6 @@ export default function App() {
                 {activeTab === 'breakdown' && (
                   <BreakdownTable
                     breakdown={result.translationBreakdown}
-                    selectedLineNumber={selectedLineNumber}
-                    onSelectLine={handleSelectLine}
                   />
                 )}
               </>
