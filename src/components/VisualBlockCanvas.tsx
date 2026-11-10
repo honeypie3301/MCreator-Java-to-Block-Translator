@@ -983,7 +983,7 @@ const BlocklyNodeRenderer: React.FC<{
         }`}
       >
         <div
-          className="rounded-md px-2.5 py-1.5 text-white shadow border flex items-center gap-1.5 flex-wrap min-w-[240px]"
+          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap min-w-[240px]"
           style={{
             backgroundColor: theme.headerBg,
             borderColor: theme.border,
@@ -1045,7 +1045,7 @@ const BlocklyNodeRenderer: React.FC<{
         }`}
       >
         <div
-          className="rounded-md px-2.5 py-1.5 text-white shadow border flex items-center gap-1.5 flex-wrap min-w-[280px]"
+          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap min-w-[280px]"
           style={{
             backgroundColor: theme.headerBg,
             borderColor: theme.border,
@@ -1217,7 +1217,7 @@ const BlocklyNodeRenderer: React.FC<{
         }`}
       >
         <div
-          className="rounded-md px-2.5 py-1.5 text-white shadow border flex items-center gap-1.5 flex-wrap min-w-[280px]"
+          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap min-w-[280px]"
           style={{ backgroundColor: theme.headerBg, borderColor: theme.border }}
         >
           {isCopy ? (
@@ -1356,7 +1356,7 @@ const BlocklyNodeRenderer: React.FC<{
         }`}
       >
         <div
-          className="rounded-md px-2.5 py-1.5 text-white shadow border flex items-center gap-1.5 flex-wrap min-w-[280px]"
+          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap min-w-[280px]"
           style={{ backgroundColor: theme.headerBg, borderColor: theme.border }}
         >
           {node.type === 'itemstack_shrink' ? (
@@ -1498,7 +1498,7 @@ const BlocklyNodeRenderer: React.FC<{
         }`}
       >
         <div
-          className="rounded-md px-2.5 py-1.5 text-white shadow border flex items-center gap-1.5 flex-wrap min-w-[280px]"
+          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap min-w-[280px]"
           style={{ backgroundColor: theme.headerBg, borderColor: theme.border }}
         >
           {isEntityData ? (
@@ -1615,7 +1615,7 @@ const BlocklyNodeRenderer: React.FC<{
         }`}
       >
         <div
-          className="rounded-md px-2.5 py-1.5 text-white shadow border flex items-center gap-1.5 flex-wrap min-w-[320px]"
+          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap min-w-[320px]"
           style={{ backgroundColor: '#a58c5b', borderColor: '#877248' }}
         >
           <span className="font-bold text-[11px]">Spawn entity:</span>
@@ -1676,7 +1676,7 @@ const BlocklyNodeRenderer: React.FC<{
         }`}
       >
         <div
-          className="rounded-md px-2.5 py-1.5 text-white shadow border flex items-center gap-1.5 flex-wrap min-w-[320px]"
+          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap min-w-[320px]"
           style={{ backgroundColor: '#a58c5b', borderColor: '#877248' }}
         >
           <span className="font-bold text-[11px]">Spawn dropped item</span>
@@ -1725,7 +1725,7 @@ const BlocklyNodeRenderer: React.FC<{
         }`}
       >
         <div
-          className="rounded-md px-2.5 py-1.5 text-white shadow border flex flex-col gap-1.5 min-w-[280px]"
+          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex flex-col gap-1.5 min-w-[280px]"
           style={{ backgroundColor: theme.headerBg, borderColor: theme.border }}
         >
           <div className="flex items-center justify-between gap-1.5 border-b border-white/20 pb-0.5">
@@ -1818,6 +1818,75 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
+  // 2.8.5 ENTITY ADD EXHAUSTION (Increase exhaustion of [entity] by [amount])
+  if (node.type === 'entity_add_exhaustion') {
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    const amtBlock = node.values?.find(v => v.name === 'amount')?.block;
+
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelectBlock?.(node.id, node.sourceLine);
+        }}
+        className={`flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all ${
+          isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
+        }`}
+      >
+        <div
+          className="rounded px-2.5 py-1 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap min-w-[260px]"
+          style={{
+            backgroundColor: '#5ba58c',
+            borderColor: '#498671',
+          }}
+        >
+          <span className="font-bold text-[11px] whitespace-nowrap">Increase exhaustion of</span>
+          {entBlock ? (
+            <InlineValueBlock
+              node={entBlock}
+              inputLayoutMode={inputLayoutMode}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          ) : (
+            <div className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#48836f] text-[10.5px]">
+              Event/target entity
+            </div>
+          )}
+          <span className="font-bold text-[11px] whitespace-nowrap">by</span>
+          {amtBlock && (
+            <InlineValueBlock
+              node={amtBlock}
+              inputLayoutMode={inputLayoutMode}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          {node.sourceLine && (
+            <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
+              L{node.sourceLine}
+            </span>
+          )}
+        </div>
+
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer
+              node={node.next}
+              inputLayoutMode={inputLayoutMode}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // 2.9 Return statement blocks: return_logic, return_number, return_string, return_itemstack, etc.
   if (node.type.startsWith('return_')) {
     const returnVal = node.values?.find(v => v.name === 'return' || v.name === 'value')?.block;
@@ -1843,7 +1912,7 @@ const BlocklyNodeRenderer: React.FC<{
         }`}
       >
         <div
-          className="rounded px-2.5 py-1 text-white shadow border flex items-center gap-1.5 flex-wrap min-w-[220px]"
+          className="rounded px-2.5 py-1 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap min-w-[220px]"
           style={{
             backgroundColor: returnTheme.headerBg,
             borderColor: returnTheme.border,
@@ -1896,7 +1965,7 @@ const BlocklyNodeRenderer: React.FC<{
       }`}
     >
       <div
-        className="rounded-md px-2.5 py-1.5 text-white shadow border flex flex-col gap-1 min-w-[260px]"
+        className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex flex-col gap-1 min-w-[260px]"
         style={{
           backgroundColor: theme.headerBg,
           borderColor: theme.border,
@@ -2272,6 +2341,37 @@ const InlineValueBlock: React.FC<{
     );
   }
 
+
+  // Entity Tick Count: Get number of ticks [entity] has existed for
+  if (node.type === 'entity_get_tickcount') {
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelectBlock?.(node.id, node.sourceLine);
+        }}
+        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
+          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+        }`}
+        style={{ backgroundColor: '#5b80a5', borderColor: '#486887' }}
+      >
+        <span className="font-semibold text-white/95 text-[10.5px]">Get number of ticks</span>
+        {entBlock ? (
+          <InlineValueBlock
+            node={entBlock}
+            inputLayoutMode={inputLayoutMode}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        ) : (
+          <div className="bg-[#5ba58c] text-white px-1.5 py-0.2 rounded text-[10px]">Event/target entity</div>
+        )}
+        <span className="font-semibold text-white/95 text-[10.5px]">has existed for</span>
+      </div>
+    );
+  }
 
   // Entity coordinate positions (X position of [entity], Y position of [entity], Z position of [entity])
   if (node.type === 'entity_pos_x' || node.type === 'entity_pos_y' || node.type === 'entity_pos_z') {

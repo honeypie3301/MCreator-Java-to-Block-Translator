@@ -352,6 +352,18 @@ export interface StatementWithLocation {
 function unwrapMCreatorBoilerplate(text: string): string {
   let s = text;
 
+  // 0. Unwrap statement-level instanceof defensive type guard wrappers:
+  // if (entity instanceof Player _player) _player.causeFoodExhaustion(-1); -> entity.causeFoodExhaustion(-1);
+  // if (entity instanceof Player _player) _player.giveExperiencePoints(10); -> entity.giveExperiencePoints(10);
+  // if (entity instanceof Player _player) _player.getFoodData().setFoodLevel(20); -> entity.setFoodLevel(20);
+  // if (entity instanceof LivingEntity _entity) _entity.setHealth(10); -> entity.setHealth(10);
+  // if (entity instanceof LivingEntity _entity) _entity.swing(InteractionHand.MAIN_HAND, true); -> entity.swing(InteractionHand.MAIN_HAND, true);
+  // if (entity instanceof Player _player) _player.closeContainer(); -> entity.closeContainer();
+  s = s.replace(
+    /if\s*\(\s*([a-zA-Z0-9_.]+)\s+instanceof\s+(?:Player|ServerPlayer|LivingEntity|Entity|Mob)\s+([a-zA-Z0-9_]+)\s*\)\s*(?:\{\s*)?\2\.([a-zA-Z0-9_]+)\s*\(([^;]*?)\)\s*;?\s*(?:\})?/g,
+    (_, ent, alias, method, args) => `${ent}.${method}(${args});`
+  );
+
   // 1. Unwrap inline instanceof casts inside ternaries:
   // (entity instanceof LivingEntity _livEnt ? _livEnt.getHealth() : -1) -> entity.getHealth()
   // (entity instanceof Player _plr ? _plr.getFoodData().getFoodLevel() : 0) -> entity.getFoodData().getFoodLevel()
@@ -2322,6 +2334,138 @@ function parseJavaStatementInternal(
     }
   }
 
+  // 14.5 ENTITY ADD EXHAUSTION: entity.causeFoodExhaustion(amount)
+  if (stmt.includes('causeFoodExhaustion(')) {
+    const amtMatch = stmt.match(/causeFoodExhaustion(([^)]+))/);
+    const amt = amtMatch ? amtMatch[1].trim() : '-1';
+    const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)./);
+    const target = targetMatch ? targetMatch[1] : 'entity';
+
+    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `exhaust_${idSeq}`, mcreatorBlock: 'entity_add_exhaustion', explanation: 'Increase exhaustion of entity' });
+    return {
+      id: `exhaust_${idSeq}`,
+      type: 'entity_add_exhaustion',
+      category: 'action',
+      title: 'Increase exhaustion of entity',
+      values: [
+        { name: 'entity', block: parseExpressionToAST(target, idSeq * 10 + 1) },
+        { name: 'amount', block: parseExpressionToAST(amt, idSeq * 10 + 2) },
+      ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
+
+  // 14.6 ENTITY ADD EXPERIENCE / XP
+  if (stmt.includes('giveExperiencePoints(') || stmt.includes('giveExperienceLevels(')) {
+    const isLevel = stmt.includes('giveExperienceLevels(');
+    const amtMatch = stmt.match(/(?:giveExperiencePoints|giveExperienceLevels)(([^)]+))/);
+    const amt = amtMatch ? amtMatch[1].trim() : '1';
+    const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)./);
+    const target = targetMatch ? targetMatch[1] : 'entity';
+    const blockType = isLevel ? 'entity_add_xp_level' : 'entity_add_xp';
+    const title = isLevel ? 'Add experience levels to entity' : 'Add experience to entity';
+
+    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `xp_${idSeq}`, mcreatorBlock: blockType, explanation: title });
+    return {
+      id: `xp_${idSeq}`,
+      type: blockType,
+      category: 'action',
+      title,
+      values: [
+        { name: 'entity', block: parseExpressionToAST(target, idSeq * 10 + 1) },
+        { name: 'xpamount', block: parseExpressionToAST(amt, idSeq * 10 + 2) },
+      ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
+
+  // 14.7 ENTITY SWING HAND
+  if (stmt.includes('.swing(')) {
+    const isOffhand = stmt.includes('OFF_HAND');
+    const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)./);
+    const target = targetMatch ? targetMatch[1] : 'entity';
+    const blockType = isOffhand ? 'entity_swing_offhand' : 'entity_swing_mainhand';
+    const title = isOffhand ? 'Swing off hand' : 'Swing main hand';
+
+    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `swing_${idSeq}`, mcreatorBlock: blockType, explanation: title });
+    return {
+      id: `swing_${idSeq}`,
+      type: blockType,
+      category: 'action',
+      title,
+      values: [
+        { name: 'entity', block: parseExpressionToAST(target, idSeq * 10 + 1) },
+      ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
+
+  // 14.8 ENTITY SET DELTA MOVEMENT / VELOCITY
+  if (stmt.includes('.setDeltaMovement(')) {
+    const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)./);
+    const target = targetMatch ? targetMatch[1] : 'entity';
+    let vx = '0', vy = '0', vz = '0';
+    const v3Idx = stmt.indexOf('new Vec3(');
+    if (v3Idx !== -1) {
+      let depth = 1;
+      let start = v3Idx + 'new Vec3('.length;
+      let end = -1;
+      for (let i = start; i < stmt.length; i++) {
+        if (stmt[i] === '(') depth++;
+        else if (stmt[i] === ')') { depth--; if (depth === 0) { end = i; break; } }
+      }
+      if (end !== -1) {
+        const v3Args = splitArgs(stmt.substring(start, end));
+        if (v3Args.length >= 3) {
+          vx = v3Args[0];
+          vy = v3Args[1];
+          vz = v3Args[2];
+        }
+      }
+    }
+
+    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `mov_${idSeq}`, mcreatorBlock: 'entity_set_movement', explanation: 'Set entity velocity vector' });
+    return {
+      id: `mov_${idSeq}`,
+      type: 'entity_set_movement',
+      category: 'action',
+      title: 'Set velocity of entity',
+      values: [
+        { name: 'entity', block: parseExpressionToAST(target, idSeq * 10 + 1) },
+        { name: 'vx', block: parseExpressionToAST(vx, idSeq * 10 + 2) },
+        { name: 'vy', block: parseExpressionToAST(vy, idSeq * 10 + 3) },
+        { name: 'vz', block: parseExpressionToAST(vz, idSeq * 10 + 4) },
+      ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
+
+  // 14.9 ENTITY SET FOOD LEVEL
+  if (stmt.includes('.setFoodLevel(')) {
+    const amtMatch = stmt.match(/setFoodLevel(([^)]+))/);
+    const amt = amtMatch ? amtMatch[1].trim() : '20';
+    const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)./);
+    const target = targetMatch ? targetMatch[1] : 'entity';
+
+    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `food_set_${idSeq}`, mcreatorBlock: 'entity_set_foodlevel', explanation: 'Set food level of entity' });
+    return {
+      id: `food_set_${idSeq}`,
+      type: 'entity_set_foodlevel',
+      category: 'action',
+      title: 'Set food level of entity',
+      values: [
+        { name: 'entity', block: parseExpressionToAST(target, idSeq * 10 + 1) },
+        { name: 'foodlevel', block: parseExpressionToAST(amt, idSeq * 10 + 2) },
+      ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
+
   // 15. HEAL / SET HEALTH
   if (stmt.includes('.heal(') || stmt.includes('.setHealth(')) {
     const amtMatch = stmt.match(/(?:heal|setHealth)\(([^)]+)\)/);
@@ -3903,12 +4047,26 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
     const left = expr.substring(0, mulDivIdx).trim();
     const right = expr.substring(mulDivIdx + 1).trim();
 
+    if (op === '%') {
+      return {
+        id: `math_mod_${seq}`,
+        type: 'math_dual_ops',
+        category: 'math',
+        title: 'MOD',
+        fields: { OP: 'MOD' },
+        values: [
+          { name: 'A', block: parseExpressionToAST(left, seq * 10 + 1) },
+          { name: 'B', block: parseExpressionToAST(right, seq * 10 + 2) },
+        ],
+      };
+    }
+
     return {
       id: `math_bin_${seq}`,
       type: 'math_binary',
       category: 'math',
       title: op,
-      fields: { OP: op === '*' ? 'MULTIPLY' : op === '/' ? 'DIVIDE' : 'MODULO' },
+      fields: { OP: op === '*' ? 'MULTIPLY' : 'DIVIDE' },
       values: [
         { name: 'A', block: parseExpressionToAST(left, seq * 10 + 1) },
         { name: 'B', block: parseExpressionToAST(right, seq * 10 + 2) },
@@ -4227,13 +4385,16 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
   if (expr.includes('instanceof')) {
     const parts = expr.split('instanceof').map(p => p.trim());
     const entityExpr = parts[0];
-    const targetType = parts[1] ? parts[1].split(/\s+/)[0] : 'Player';
+    let rawType = parts[1] ? parts[1].split(/\s+/)[0] : 'Player';
+    let targetType = rawType;
+    if (rawType === 'Player' || rawType === 'ServerPlayer') targetType = 'EntityPlayer';
+    else if (rawType === 'LivingEntity') targetType = 'EntityLiving';
 
     return {
       id: `inst_${seq}`,
       type: 'logic_entity_compare',
       category: 'logic',
-      title: `Is (sub)type of ${targetType}`,
+      title: `Is (sub)type of ${targetType === 'EntityPlayer' ? 'Player' : targetType}`,
       fields: { entity: targetType },
       values: [{ name: 'compareTo', block: parseExpressionToAST(entityExpr, seq * 10 + 1) }],
     };
@@ -5463,6 +5624,22 @@ let xVal = 'x', yVal = 'y', zVal = 'z';
       category: 'item',
       title,
       fields: { value },
+    };
+  }
+
+  // ENTITY TICK COUNT: entity.tickCount -> entity_get_tickcount
+  if (expr.endsWith('.tickCount') || expr.endsWith('.tickCount)') || expr === 'entity.tickCount') {
+    const rawEnt = expr.replace(/\.?tickCount\)?$/, '').replace(/^[\(]+/, '').trim();
+    const entAST: BlockASTNode = (!rawEnt || rawEnt === 'entity' || rawEnt === 'player' || rawEnt === '_ent')
+      ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
+      : parseExpressionToAST(rawEnt, seq * 10 + 1);
+
+    return {
+      id: `tick_cnt_${seq}`,
+      type: 'entity_get_tickcount',
+      category: 'entity',
+      title: 'Get number of ticks entity has existed for',
+      values: [{ name: 'entity', block: entAST }],
     };
   }
 

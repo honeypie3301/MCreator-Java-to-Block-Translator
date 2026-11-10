@@ -8,7 +8,6 @@ A high-performance AST compilation engine and visual procedure translator design
 
 - **1:1 AST Mapping Engine**: Converts complex NeoForge Java constructs—including entity tag checks (`TagKey.create`), world difficulty comparisons, spatial cube iterations (`getEntitiesOfClass(...).inflate(...)`), persistent NBT tag modifications (`putDouble`, `putBoolean`, `putString`), and custom code snippets—into native MCreator 2026.1 procedure block structures.
 - **Authentic MCreator Blockly UI**: Features pixel-accurate visual block rendering with exact MCreator color themes, puzzle notches, C-block cavities, inline getter pills, and real-time procedure warning/error strips.
-- **Bi-Directional Code & AST Navigation**: Click any block in the canvas to jump directly to its originating Java source line and vice-versa.
 - **Multi-Element Template Support**: Translates procedures (`.ptpl`), custom AI tasks (`.aitpl`), command templates (`.cmdtpl`), and feature placement templates (`.ftpl`).
 - **FreeMarker Pattern Synchronization**: Derived directly from the official MCreator repository FreeMarker templates (`neoforge-1.21.1` and `neoforge-26.3`), guaranteeing 100% compatibility when importing `.ptpl` XML files back into MCreator.
 
