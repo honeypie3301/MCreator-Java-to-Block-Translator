@@ -782,6 +782,7 @@ const BlocklyNodeRenderer: React.FC<{
                 <div className="flex items-center gap-1.5 flex-1">
                   <InlineValueBlock
                     node={if0.block}
+                    inputLayoutMode={inputLayoutMode}
                     selectedLineNumber={selectedLineNumber}
                     selectedBlockId={selectedBlockId}
                     onSelectBlock={onSelectBlock}
@@ -2271,6 +2272,160 @@ const InlineValueBlock: React.FC<{
     );
   }
 
+
+  // Entity coordinate positions (X position of [entity], Y position of [entity], Z position of [entity])
+  if (node.type === 'entity_pos_x' || node.type === 'entity_pos_y' || node.type === 'entity_pos_z') {
+    const axis = node.type === 'entity_pos_x' ? 'X' : node.type === 'entity_pos_y' ? 'Y' : 'Z';
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelectBlock?.(node.id, node.sourceLine);
+        }}
+        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
+          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+        }`}
+        style={{ backgroundColor: '#5b67a5', borderColor: '#485285' }}
+      >
+        <span className="font-semibold text-white/95 text-[10.5px]">{axis} position of</span>
+        {entBlock ? (
+          <InlineValueBlock
+            node={entBlock}
+            inputLayoutMode={inputLayoutMode}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        ) : (
+          <span className="bg-[#5ba58c] text-white px-1.5 py-0.2 rounded text-[10px]">Event/target entity</span>
+        )}
+      </div>
+    );
+  }
+  // World Entity In Range Exists block renderer
+  if (node.type === 'world_entity_inrange_exists') {
+    const entName = (node.fields?.entity || 'Entity').replace(/^CUSTOM:/, '');
+    const xVal = node.values?.find(v => v.name === 'x')?.block;
+    const yVal = node.values?.find(v => v.name === 'y')?.block;
+    const zVal = node.values?.find(v => v.name === 'z')?.block;
+    const rangeVal = node.values?.find(v => v.name === 'range')?.block;
+
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelectBlock?.(node.id, node.sourceLine);
+        }}
+        className={`px-2 py-1 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 flex-wrap ${
+          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+        }`}
+        style={{ backgroundColor: '#4a6b82', borderColor: '#354f61' }}
+      >
+        <span className="font-semibold text-white/95 text-[10.5px]">Does entity exist at x:</span>
+        {xVal && <InlineValueBlock node={xVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        <span className="font-semibold text-white/95 text-[10.5px]">y:</span>
+        {yVal && <InlineValueBlock node={yVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        <span className="font-semibold text-white/95 text-[10.5px]">z:</span>
+        {zVal && <InlineValueBlock node={zVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        <span className="font-semibold text-white/95 text-[10.5px]">in square cube with size</span>
+        {rangeVal && <InlineValueBlock node={rangeVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        <span className="font-semibold text-white/95 text-[10.5px]">of type</span>
+        <span className="font-bold text-white text-[10.5px] bg-black/40 px-1.5 py-0.5 rounded border border-white/20">{entName}</span>
+      </div>
+    );
+  }
+
+  // World Data Is Air block renderer
+  if (node.type === 'world_data_isair') {
+    const xVal = node.values?.find(v => v.name === 'x')?.block;
+    const yVal = node.values?.find(v => v.name === 'y')?.block;
+    const zVal = node.values?.find(v => v.name === 'z')?.block;
+
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelectBlock?.(node.id, node.sourceLine);
+        }}
+        className={`px-2 py-1 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
+          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+        }`}
+        style={{ backgroundColor: '#4a6b82', borderColor: '#354f61' }}
+      >
+        <span className="font-semibold text-white/95 text-[10.5px]">Is air at x:</span>
+        {xVal && <InlineValueBlock node={xVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        <span className="font-semibold text-white/95 text-[10.5px]">y:</span>
+        {yVal && <InlineValueBlock node={yVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        <span className="font-semibold text-white/95 text-[10.5px]">z:</span>
+        {zVal && <InlineValueBlock node={zVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+      </div>
+    );
+  }
+
+  // Dimension ID block: entity_dimension_id
+  if (node.type === 'entity_dimension_id') {
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); onSelectBlock?.(node.id, node.sourceLine); }}
+        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''}`}
+        style={{ backgroundColor: '#3d6b8c', borderColor: '#2e5570' }}
+      >
+        <span className="font-semibold text-[10px]">ID of dimension</span>
+        {entBlock && <InlineValueBlock node={entBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+      </div>
+    );
+  }
+
+  // Dimension type block: get_dimensionid
+  if (node.type === 'get_dimensionid') {
+    const dimName = (node.fields?.dimension || node.title || 'Dimension').replace(/^CUSTOM:/, '');
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); onSelectBlock?.(node.id, node.sourceLine); }}
+        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''}`}
+        style={{ backgroundColor: '#2a5c40', borderColor: '#1d4330' }}
+      >
+        <span className="font-semibold text-[10px]">Dimension type:</span>
+        <span className="font-bold text-emerald-200 text-[10px] bg-black/30 px-1 rounded">{dimName}</span>
+      </div>
+    );
+  }
+
+  // Dimension comparison block: compare_dimensionids
+  if (node.type === 'compare_dimensionids') {
+    const aBlock = node.values?.find(v => v.name === 'a')?.block;
+    const bBlock = node.values?.find(v => v.name === 'b')?.block;
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); onSelectBlock?.(node.id, node.sourceLine); }}
+        className={`px-2 py-1 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer flex-wrap ${isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''}`}
+        style={{ backgroundColor: '#2d4a35', borderColor: '#1e3524' }}
+      >
+        {aBlock && <InlineValueBlock node={aBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        <span className="font-bold text-emerald-300 text-[10px] bg-black/30 px-1 rounded">is in</span>
+        <span className="font-bold text-emerald-300 text-[10px]">=</span>
+        {bBlock && <InlineValueBlock node={bBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+      </div>
+    );
+  }
+
+  // Entity food level block: entity_foodlevel / entity_get_food_level
+  if (node.type === 'entity_foodlevel' || node.type === 'entity_get_food_level') {
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); onSelectBlock?.(node.id, node.sourceLine); }}
+        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''}`}
+        style={{ backgroundColor: '#7c4b1a', borderColor: '#5c3612' }}
+      >
+        <span className="font-semibold text-[10px]">Get food level of</span>
+        {entBlock && <InlineValueBlock node={entBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+      </div>
+    );
+  }
+
   // Entity Iterator: Entity iterator
   if (node.type === 'entity_iterator') {
     return (
@@ -2692,24 +2847,21 @@ const InlineValueBlock: React.FC<{
     const op = node.fields?.OP || node.title || '==';
 
     if (isExternal) {
+      // True MCreator External Input Layout: Stacked vertically with socket notch indicators
       return (
         <div
           onClick={(e) => {
             e.stopPropagation();
             onSelectBlock?.(node.id, node.sourceLine);
           }}
-          className={`p-1.5 rounded text-white font-sans text-[11px] flex flex-col gap-1 shadow-xs border cursor-pointer max-w-full ${
+          className={`rounded text-white font-sans text-[11px] flex flex-col shadow-xs border cursor-pointer max-w-full overflow-hidden ${
             isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
           }`}
           style={{ backgroundColor: theme.headerBg, borderColor: theme.border }}
         >
-          <div className="flex items-center justify-between gap-1 border-b border-black/20 pb-0.5">
-            <span className="text-[10px] font-bold text-white/85">Compare</span>
-            <span className="font-bold px-1.5 py-0.2 rounded bg-black/40 border border-white/20 text-yellow-200 text-[10px]">
-              {op}
-            </span>
-          </div>
-          <div className="flex flex-col gap-1 pl-1">
+          {/* Top Row: Left value (Socket A) */}
+          <div className="flex items-center gap-1.5 px-2 py-1 border-b border-black/15">
+            <span className="w-2.5 h-2.5 rounded-xs bg-black/40 flex items-center justify-center text-[8px] opacity-70">◖</span>
             {leftVal && (
               <InlineValueBlock
                 node={leftVal}
@@ -2719,6 +2871,14 @@ const InlineValueBlock: React.FC<{
                 onSelectBlock={onSelectBlock}
               />
             )}
+          </div>
+
+          {/* Bottom Row: Operator Dropdown + Right value (Socket B) */}
+          <div className="flex items-center gap-1.5 px-2 py-1 bg-black/10">
+            <span className="font-bold px-1.5 py-0.5 rounded bg-black/40 border border-white/20 text-yellow-200 text-[10px] flex items-center gap-1">
+              {op} <span className="text-[8px] opacity-70">▼</span>
+            </span>
+            <span className="w-2.5 h-2.5 rounded-xs bg-black/40 flex items-center justify-center text-[8px] opacity-70">◖</span>
             {rightVal && (
               <InlineValueBlock
                 node={rightVal}
@@ -2733,13 +2893,14 @@ const InlineValueBlock: React.FC<{
       );
     }
 
+    // True MCreator Inline Input Layout: Flat horizontal chain
     return (
       <div
         onClick={(e) => {
           e.stopPropagation();
           onSelectBlock?.(node.id, node.sourceLine);
         }}
-        className={`px-1.5 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1 shadow-xs border cursor-pointer shrink-0 ${
+        className={`px-2 py-1 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
           isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
         }`}
         style={{ backgroundColor: theme.headerBg, borderColor: theme.border }}

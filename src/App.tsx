@@ -137,9 +137,25 @@ export default function App() {
   };
 
   // Auto-translate on initial load and change of element type or version
+  const isFirstMount = React.useRef(true);
+
+  // Initial load auto-translate — deferred so UI paints first
   useEffect(() => {
+    const timer = setTimeout(() => {
+      if (code.trim()) handleTranslate(undefined, true);
+    }, 50);
+    return () => clearTimeout(timer);
+  }, []); // only on mount
+
+  // Re-translate when element type or version changes (skip the very first mount)
+  useEffect(() => {
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
     if (code.trim()) {
-      handleTranslate(undefined, true);
+      const timer = setTimeout(() => handleTranslate(undefined, true), 0);
+      return () => clearTimeout(timer);
     }
   }, [elementType, neoForgeVersion]);
 

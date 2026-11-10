@@ -8,7 +8,7 @@ import {
   TranslationResult,
   VariableDecl,
 } from '../types';
-import { ELEMENT_CONFIGS } from '../data/mcreatorBlocksDatabase';
+import { ELEMENT_CONFIGS } from '../data/elementConfigs';
 
 export const GLOBAL_TRIGGERS: Record<string, string> = {
   no_ext_trigger: 'No additional trigger',
@@ -94,6 +94,11 @@ export function translateJavaToMCreator(
     activeBody = extractFallbackMethodBody(code);
     activeMethodName = activeMethodName || 'execute';
   }
+
+  // Normalize dependency aliases: strip declarations and unify variable names
+  // e.g. "Player player = event.getEntity();" → remove line, replace "player." → "entity."
+  // e.g. "Level world = event.getLevel();" → remove line, replace "world." → "level."
+  activeBody = normalizeDependencyAliases(activeBody);
 
   // 2. Detect Event Listener & Dependencies from Java code and active method
   let detectedEventTrigger = userEventOverride && userEventOverride !== 'auto'
@@ -327,6 +332,147 @@ export interface StatementWithLocation {
   text: string;
   startLine: number;
   endLine: number;
+}
+
+/* -------------------------------------------------------------------------- */
+/*              Dependency Alias Normalization (Pre-processing pass)           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Normalize dependency aliases in a Java method body:
+ * - Strips lines like `Player player = event.getEntity();`
+ * - Replaces usages like `player.getHealth()` → `entity.getHealth()`
+ * - Strips lines like `Level world = event.getLevel();`
+ * - Replaces usages like `world.playSound(...)` → `level.playSound(...)`
+ */
+/**
+ * Unwraps MCreator Java code generator boilerplate, transforming raw NeoForge compiled
+ * output idioms back into clean, high-level procedure expressions.
+ */
+function unwrapMCreatorBoilerplate(text: string): string {
+  let s = text;
+
+  // 1. Unwrap inline instanceof casts inside ternaries:
+  // (entity instanceof LivingEntity _livEnt ? _livEnt.getHealth() : -1) -> entity.getHealth()
+  // (entity instanceof Player _plr ? _plr.getFoodData().getFoodLevel() : 0) -> entity.getFoodData().getFoodLevel()
+  s = s.replace(
+    /\(?\s*([a-zA-Z0-9_.]+)\s+instanceof\s+(?:LivingEntity|Player|Entity|ServerPlayer)\s+([a-zA-Z0-9_]+)\s*\?\s*\2\.([^:]+?)\s*:\s*[-0-9a-zA-Z_."'()]+\s*\)?/g,
+    (_, ent, alias, call) => `${ent}.${call.trim()}`
+  );
+
+  // 2. Unwrap ResourceKey / ResourceLocation dimension lookups:
+  // ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse("the_backwoods:backwoods")) -> "CUSTOM:Backwoods"
+  s = s.replace(
+    /ResourceKey\.create\(\s*Registries\.DIMENSION\s*,\s*ResourceLocation\.(?:parse|fromNamespaceAndPath)\(\s*["']([^"']+)["']\s*\)\s*\)/g,
+    (_, res) => {
+      const parts = res.split(':');
+      const name = parts.length > 1 ? parts[1] : parts[0];
+      return 'CUSTOM:' + name.charAt(0).toUpperCase() + name.slice(1);
+    }
+  );
+
+  // 3. Unwrap world server/client checks that MCreator generates for sound / particles / blocks:
+  // if (world instanceof Level _level) { if (!_level.isClientSide()) { ... } else { ... } }
+  s = s.replace(
+    /if\s*\(\s*(?:world|level)\s+instanceof\s+Level\s+_level\s*\)\s*\{\s*if\s*\(\s*!_level\.isClientSide\(\)\s*\)\s*\{([\s\S]*?)\}\s*else\s*\{[\s\S]*?\}\s*\}/g,
+    (_, serverSideBody) => serverSideBody.trim()
+  );
+
+  // 4. Unwrap SoundEvent / BuiltInRegistries lookup in playSound:
+  // BuiltInRegistries.SOUND_EVENT.get(ResourceLocation.parse("the_backwoods:wood_creak_paranoia")) -> "wood_creak_paranoia"
+  s = s.replace(
+    /BuiltInRegistries\.SOUND_EVENT\.get\(\s*ResourceLocation\.(?:parse|fromNamespaceAndPath)\(\s*["']([^"']+)["']\s*\)\s*\)/g,
+    (_, soundLoc) => {
+      const parts = soundLoc.split(':');
+      return '"' + (parts.length > 1 ? parts[1] : parts[0]) + '"';
+    }
+  );
+
+  // 5. Unwrap SoundSource enum: SoundSource.AMBIENT -> "ambient"
+  s = s.replace(/SoundSource\.([A-Z_]+)/g, (_, src) => '"' + src.toLowerCase() + '"');
+
+  // 6. Unwrap BlockPos.containing(x, y, z) -> x, y, z with balanced parentheses
+  const needle = 'BlockPos.containing(';
+  let bpIdx = 0;
+  while ((bpIdx = s.indexOf(needle, bpIdx)) !== -1) {
+    let depth = 1;
+    let start = bpIdx + needle.length;
+    let end = -1;
+    for (let i = start; i < s.length; i++) {
+      if (s[i] === '(') depth++;
+      else if (s[i] === ')') {
+        depth--;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+    if (end !== -1) {
+      const inner = s.substring(start, end);
+      s = s.substring(0, bpIdx) + inner + s.substring(end + 1);
+      bpIdx += inner.length;
+    } else {
+      bpIdx += needle.length;
+    }
+  }
+
+  // 7. Strip float casts: (float) expr -> expr
+  s = s.replace(/\(float\)\s*/g, '');
+
+  return s;
+}
+
+function normalizeDependencyAliases(body: string): string {
+  body = unwrapMCreatorBoilerplate(body);
+  const depAliasRegex = /^\s*(?:Player|LivingEntity|Entity|Level|ServerLevel|LevelAccessor|BlockPos)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*[^;]+;\s*$/gm;
+  const aliases: Record<string, string> = {};
+
+  // First pass: collect aliases and their canonical mappings
+  let m: RegExpExecArray | null;
+  depAliasRegex.lastIndex = 0;
+  while ((m = depAliasRegex.exec(body)) !== null) {
+    const varName = m[1];
+    const line = m[0];
+    if (line.includes('.getEntity()') || line.includes('.getPlayer()')) {
+      aliases[varName] = 'entity';
+    } else if (line.includes('.getLevel()') || line.includes('.getWorld()') || line.includes('getLevel()')) {
+      aliases[varName] = 'level';
+    }
+  }
+
+  // Remove the alias declaration lines
+  let result = body.replace(depAliasRegex, '');
+
+  // Replace usages: player.getHealth() → entity.getHealth(), world.playSound → level.playSound, etc.
+  for (const [alias, canonical] of Object.entries(aliases)) {
+    if (alias !== canonical) {
+      result = result.replace(new RegExp(`\\b${alias}\\.`, 'g'), `${canonical}.`);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Splits a comma-separated argument string respecting nested parentheses and brackets.
+ */
+function splitArgs(argsStr: string): string[] {
+  const args: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const ch of argsStr) {
+    if (ch === '(' || ch === '[') depth++;
+    else if (ch === ')' || ch === ']') depth--;
+    if (ch === ',' && depth === 0) {
+      args.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim()) args.push(current.trim());
+  return args;
 }
 
 /**
@@ -2117,25 +2263,63 @@ function parseJavaStatementInternal(
 
   // 14. PLAY SOUND
   if (stmt.includes('playSound') || stmt.includes('play_sound')) {
-    const soundMatch = stmt.match(/playSound\(([^)]+)\)/);
-    const params = soundMatch ? soundMatch[1].split(',').map(s => s.trim()) : [];
-    const soundName = params[0] ? params[0].replace(/"/g, '') : 'wood_creak_paranoia';
+    // Find the full balanced argument list using balanced parentheses
+    const pIdx = stmt.indexOf('playSound(');
+    if (pIdx !== -1) {
+      let depth = 0;
+      let start = stmt.indexOf('(', pIdx);
+      let end = start;
+      for (let i = start; i < stmt.length; i++) {
+        if (stmt[i] === '(') depth++;
+        else if (stmt[i] === ')') { depth--; if (depth === 0) { end = i; break; } }
+      }
+      const argsStr = stmt.substring(start + 1, end);
+      const params = splitArgs(argsStr);
 
-    breakdown.push({ javaLine: stmt, mcreatorBlock: 'play_sound', explanation: `Play sound '${soundName}'` });
-    return {
-      id: `play_sound_${idSeq}`,
-      type: 'play_sound',
-      category: 'world',
-      title: 'Play sound',
-      fields: { sound: soundName, soundcategory: params[6] ? params[6].replace(/"/g, '') : 'ambient' },
-      values: [
-        { name: 'x', block: parseExpressionToAST(params[1] || 'x', idSeq * 10 + 1) },
-        { name: 'y', block: parseExpressionToAST(params[2] || 'y', idSeq * 10 + 2) },
-        { name: 'z', block: parseExpressionToAST(params[3] || 'z', idSeq * 10 + 3) },
-        { name: 'level', block: parseExpressionToAST(params[4] || '1', idSeq * 10 + 4) },
-        { name: 'pitch', block: parseExpressionToAST(params[5] || '1', idSeq * 10 + 5) },
-      ],
-    };
+      let soundName = 'sound';
+      let xExpr = 'x', yExpr = 'y', zExpr = 'z';
+      let levelExpr = '1', pitchExpr = '1', categoryStr = 'ambient';
+
+      if (params[0] === 'null') {
+        // MCreator-generated form: null, x, y, z, SoundEvent, SoundSource, vol, pitch
+        const rawSound = (params[4] || '').replace(/SoundEvents\.(CUSTOM_)?/, '').toLowerCase();
+        soundName = rawSound ? `CUSTOM:${rawSound}` : 'CUSTOM:sound';
+        xExpr = params[1] || 'x';
+        yExpr = params[2] || 'y';
+        zExpr = params[3] || 'z';
+        levelExpr = params[6] || '1';
+        pitchExpr = params[7] || '1';
+        categoryStr = (params[5] || 'ambient').replace(/SoundSource\./, '').toLowerCase();
+      } else {
+        // Simple user form: "soundName", x, y, z, vol, pitch, "category"
+        soundName = params[0] ? params[0].replace(/"/g, '') : 'sound';
+        xExpr = params[1] || 'x';
+        yExpr = params[2] || 'y';
+        zExpr = params[3] || 'z';
+        levelExpr = params[4] || '1';
+        pitchExpr = params[5] || '1';
+        categoryStr = params[6] ? params[6].replace(/"/g, '') : 'ambient';
+      }
+
+      // Normalize sound name: ensure it has a namespace prefix
+      if (!soundName.includes(':')) soundName = `CUSTOM:${soundName}`;
+
+      breakdown.push({ javaLine: stmt, mcreatorBlock: 'play_sound', explanation: `Play sound '${soundName}'` });
+      return {
+        id: `play_sound_${idSeq}`,
+        type: 'play_sound',
+        category: 'world',
+        title: 'Play sound',
+        fields: { sound: soundName, soundcategory: categoryStr },
+        values: [
+          { name: 'x', block: parseExpressionToAST(xExpr, idSeq * 10 + 1) },
+          { name: 'y', block: parseExpressionToAST(yExpr, idSeq * 10 + 2) },
+          { name: 'z', block: parseExpressionToAST(zExpr, idSeq * 10 + 3) },
+          { name: 'level', block: parseExpressionToAST(levelExpr.replace(/f$/, ''), idSeq * 10 + 4) },
+          { name: 'pitch', block: parseExpressionToAST(pitchExpr.replace(/f$/, ''), idSeq * 10 + 5) },
+        ],
+      };
+    }
   }
 
   // 15. HEAL / SET HEALTH
@@ -3620,6 +3804,48 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
       };
     }
 
+    // Dimension comparison: entity.level().dimension() == SomeDimension → compare_dimensionids
+    const dimLhs = left.match(/(?:entity|player|living)\.level\(\)\.dimension\(\)/);
+    const dimRhs = right.match(/(?:entity|player|living)\.level\(\)\.dimension\(\)/);
+    if (dimLhs || dimRhs || left.includes('.dimension()') || right.includes('.dimension()')) {
+      const entSide = (dimLhs || left.includes('.dimension()')) ? left : right;
+      const dimSide = (dimLhs || left.includes('.dimension()')) ? right : left;
+
+      const entityRaw = entSide.replace(/\.level\(\)\.dimension\(\)/, '').replace(/\.dimension\(\)/, '').trim();
+      const entBlock: BlockASTNode = (!entityRaw || entityRaw === 'entity' || entityRaw === 'player' || entityRaw === 'living')
+        ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
+        : parseExpressionToAST(entityRaw, seq * 10 + 1);
+
+      const dimIdBlock: BlockASTNode = {
+        id: `dim_id_${seq}`,
+        type: 'entity_dimension_id',
+        category: 'world',
+        title: 'ID of dimension',
+        values: [{ name: 'entity', block: entBlock }],
+      };
+
+      const rawDim = dimSide.trim();
+      const dimName = rawDim.includes(':') ? rawDim : `CUSTOM:${rawDim}`;
+      const dimTypeBlock: BlockASTNode = {
+        id: `dim_type_${seq}`,
+        type: 'get_dimensionid',
+        category: 'world',
+        title: `Dimension type: ${rawDim}`,
+        fields: { dimension: dimName },
+      };
+
+      return {
+        id: `cmp_dim_${seq}`,
+        type: 'compare_dimensionids',
+        category: 'world',
+        title: 'ID of dimension is in',
+        values: [
+          { name: 'a', block: dimIdBlock },
+          { name: 'b', block: dimTypeBlock },
+        ],
+      };
+    }
+
     let mcreatorOp = op;
     if (op === '==') mcreatorOp = '=';
 
@@ -4053,50 +4279,147 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
     };
   }
 
-  // ENTITY GETTERS
+
+  // WORLD ENTITY IN RANGE EXISTS: !world.getEntitiesOfClass(Class, new AABB(...).inflate(range / 2d), ...).isEmpty()
+  if (expr.includes('.getEntitiesOfClass(') && expr.includes('.isEmpty()')) {
+    const clsMatch = expr.match(/getEntitiesOfClass\(\s*([A-Za-z0-9_]+?)Entity\.class/);
+    const entityName = clsMatch ? clsMatch[1] : 'Entity';
+
+    const rangeMatch = expr.match(/inflate\(\s*([0-9.]+)\s*\/\s*2d?\s*\)/);
+    const rangeVal = rangeMatch ? rangeMatch[1] : '64';
+
+let xVal = 'x', yVal = 'y', zVal = 'z';
+    const v3Idx = expr.indexOf('new Vec3(');
+    if (v3Idx !== -1) {
+      let depth = 1;
+      let v3Start = v3Idx + 'new Vec3('.length;
+      let v3End = -1;
+      for (let i = v3Start; i < expr.length; i++) {
+        if (expr[i] === '(') depth++;
+        else if (expr[i] === ')') {
+          depth--;
+          if (depth === 0) {
+            v3End = i;
+            break;
+          }
+        }
+      }
+      if (v3End !== -1) {
+        const v3Args = splitArgs(expr.substring(v3Start, v3End));
+        if (v3Args.length >= 3) {
+          xVal = v3Args[0];
+          yVal = v3Args[1];
+          zVal = v3Args[2];
+        }
+      }
+    }
+
+    return {
+      id: `ent_inrange_${seq}`,
+      type: 'world_entity_inrange_exists',
+      category: 'world',
+      title: 'Does entity exist in cube',
+      fields: { entity: `CUSTOM:${entityName}` },
+      values: [
+        { name: 'x', block: parseExpressionToAST(xVal, seq * 10 + 1) },
+        { name: 'y', block: parseExpressionToAST(yVal, seq * 10 + 2) },
+        { name: 'z', block: parseExpressionToAST(zVal, seq * 10 + 3) },
+        { name: 'range', block: { id: `rng_${seq}`, type: 'math_number', category: 'math', title: rangeVal, fields: { NUM: rangeVal } } },
+      ],
+    };
+  }
+
+  // WORLD DATA IS AIR: world.isEmptyBlock(pos)
+  if (expr.includes('.isEmptyBlock(')) {
+    const posMatch = expr.match(/\.isEmptyBlock\(([^)]+)\)/);
+    let xStr = 'x', yStr = 'y', zStr = 'z';
+    if (posMatch) {
+      const parts = posMatch[1].split(',').map(s => s.trim());
+      if (parts.length >= 3) {
+        xStr = parts[0];
+        yStr = parts[1];
+        zStr = parts[2];
+      }
+    }
+    return {
+      id: `is_air_${seq}`,
+      type: 'world_data_isair',
+      category: 'world',
+      title: 'Is air at',
+      values: [
+        { name: 'x', block: parseExpressionToAST(xStr, seq * 10 + 1) },
+        { name: 'y', block: parseExpressionToAST(yStr, seq * 10 + 2) },
+        { name: 'z', block: parseExpressionToAST(zStr, seq * 10 + 3) },
+      ],
+    };
+  }
+
+  // ENTITY GETTERS — resolve receiver expression before building the block
+  const entityDepBlock = (rawEnt: string): BlockASTNode =>
+    (!rawEnt || rawEnt === 'entity' || rawEnt === 'player' || rawEnt === 'living' || rawEnt === '_player')
+      ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
+      : parseExpressionToAST(rawEnt, seq * 10 + 1);
+
   if (expr.includes('.getHealth()')) {
+    const rawEntity = expr.replace('.getHealth()', '').trim();
     return {
       id: `health_${seq}`,
       type: 'entity_get_health',
       category: 'entity',
       title: 'Current health of entity',
-      values: [{ name: 'entity', block: { id: `ent_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' } }],
+      values: [{ name: 'entity', block: entityDepBlock(rawEntity) }],
     };
   }
   if (expr.includes('.getMaxHealth()')) {
+    const rawEntity = expr.replace('.getMaxHealth()', '').trim();
     return {
       id: `max_health_${seq}`,
       type: 'entity_get_max_health',
       category: 'entity',
       title: 'Max health of entity',
-      values: [{ name: 'entity', block: { id: `ent_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' } }],
+      values: [{ name: 'entity', block: entityDepBlock(rawEntity) }],
     };
   }
   if (expr.includes('.isInWater()')) {
+    const rawEntity = expr.replace('.isInWater()', '').trim();
     return {
       id: `in_water_${seq}`,
       type: 'entity_is_inwater',
       category: 'entity',
       title: 'Is entity in water',
-      values: [{ name: 'entity', block: { id: `ent_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' } }],
+      values: [{ name: 'entity', block: entityDepBlock(rawEntity) }],
     };
   }
   if (expr.includes('.isOnFire()')) {
+    const rawEntity = expr.replace('.isOnFire()', '').trim();
     return {
       id: `on_fire_${seq}`,
       type: 'entity_is_onfire',
       category: 'entity',
       title: 'Is entity on fire',
-      values: [{ name: 'entity', block: { id: `ent_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' } }],
+      values: [{ name: 'entity', block: entityDepBlock(rawEntity) }],
     };
   }
   if (expr.includes('.getDeltaMovement()')) {
+    const rawEntity = expr.replace('.getDeltaMovement()', '').trim();
     return {
       id: `get_mov_${seq}`,
       type: 'entity_get_movement',
       category: 'entity',
       title: 'Get velocity of entity',
-      values: [{ name: 'entity', block: { id: `ent_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' } }],
+      values: [{ name: 'entity', block: entityDepBlock(rawEntity) }],
+    };
+  }
+
+  // ENTITY FOOD LEVEL: entity.getFoodData().getFoodLevel() / entity.getFoodLevel() → entity_foodlevel
+  if (expr.includes('.getFoodData().getFoodLevel()') || expr.includes('.getFoodLevel()')) {
+    const rawEntity = expr.replace(/\.getFoodData\(\)\.getFoodLevel\(\)/, '').replace(/\.getFoodLevel\(\)/, '').trim();
+    return {
+      id: `food_lvl_${seq}`,
+      type: 'entity_foodlevel',
+      category: 'player',
+      title: 'Get food level of entity',
+      values: [{ name: 'entity', block: entityDepBlock(rawEntity) }],
     };
   }
 
@@ -4850,13 +5173,54 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
   }
 
   // COORDINATES: target.getX(), getX(), x
-  if (expr.endsWith('.getX()') || expr === 'x') {
+  if (expr.includes('.getX()')) {
+    const rawEnt = expr.replace(/\.getX\(\)/, '').trim();
+    const entAST: BlockASTNode = (!rawEnt || rawEnt === 'entity' || rawEnt === 'player' || rawEnt === '_ent')
+      ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
+      : parseExpressionToAST(rawEnt, seq * 10 + 1);
+    return {
+      id: `ent_pos_x_${seq}`,
+      type: 'entity_pos_x',
+      category: 'entity',
+      title: 'X position of entity',
+      values: [{ name: 'entity', block: entAST }],
+    };
+  }
+  if (expr === 'x') {
     return { id: `x_${seq}`, type: 'coord_x', category: 'world', title: 'x' };
   }
-  if (expr.endsWith('.getY()') || expr === 'y') {
+
+  if (expr.includes('.getY()')) {
+    const rawEnt = expr.replace(/\.getY\(\)/, '').trim();
+    const entAST: BlockASTNode = (!rawEnt || rawEnt === 'entity' || rawEnt === 'player' || rawEnt === '_ent')
+      ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
+      : parseExpressionToAST(rawEnt, seq * 10 + 1);
+    return {
+      id: `ent_pos_y_${seq}`,
+      type: 'entity_pos_y',
+      category: 'entity',
+      title: 'Y position of entity',
+      values: [{ name: 'entity', block: entAST }],
+    };
+  }
+  if (expr === 'y') {
     return { id: `y_${seq}`, type: 'coord_y', category: 'world', title: 'y' };
   }
-  if (expr.endsWith('.getZ()') || expr === 'z') {
+
+  if (expr.includes('.getZ()')) {
+    const rawEnt = expr.replace(/\.getZ\(\)/, '').trim();
+    const entAST: BlockASTNode = (!rawEnt || rawEnt === 'entity' || rawEnt === 'player' || rawEnt === '_ent')
+      ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
+      : parseExpressionToAST(rawEnt, seq * 10 + 1);
+    return {
+      id: `ent_pos_z_${seq}`,
+      type: 'entity_pos_z',
+      category: 'entity',
+      title: 'Z position of entity',
+      values: [{ name: 'entity', block: entAST }],
+    };
+  }
+  if (expr === 'z') {
     return { id: `z_${seq}`, type: 'coord_z', category: 'world', title: 'z' };
   }
 

@@ -1,13 +1,19 @@
 import React from 'react';
 import { TranslationResult } from '../types';
 import { ShieldCheck, Variable, Cpu, AlertTriangle, Layers, Tag, Database } from 'lucide-react';
-import { MCREATOR_BLOCK_DATABASE } from '../data/mcreatorBlocksDatabase';
 
 interface ProcedureSpecPanelProps {
   result: TranslationResult;
 }
 
 export const ProcedureSpecPanel: React.FC<ProcedureSpecPanelProps> = ({ result }) => {
+  const [blockDatabase, setBlockDatabase] = React.useState<{ id: string; mcreatorType: string; description?: string }[]>([]);
+
+  React.useEffect(() => {
+    import('../data/mcreatorBlocksDatabase').then(mod => {
+      setBlockDatabase(mod.MCREATOR_BLOCK_DATABASE);
+    });
+  }, []);
   return (
     <div className="space-y-4 font-mono text-xs">
       {/* Overview Cards */}
@@ -131,13 +137,13 @@ export const ProcedureSpecPanel: React.FC<ProcedureSpecPanelProps> = ({ result }
       <div className="bg-[#181614] border border-[#2E2925] rounded-lg p-3 space-y-2">
         <div className="flex items-center space-x-2 text-[#FAF6F0] font-semibold border-b border-[#2E2925] pb-2">
           <Database className="w-4 h-4 text-[#CEB098]" />
-          <span>MCreator Block Database Reference Catalog ({MCREATOR_BLOCK_DATABASE.length} blocks registered)</span>
+          <span>MCreator Block Database Reference Catalog ({blockDatabase.length > 0 ? `${blockDatabase.length} blocks registered` : 'Loading…'})</span>
         </div>
         <p className="text-[11px] text-[#A39B8E]">
           Supported blocks from official MCreator GitHub repository specs:
         </p>
         <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pt-1">
-          {MCREATOR_BLOCK_DATABASE.map((b) => (
+          {blockDatabase.length > 0 ? blockDatabase.map((b) => (
             <span
               key={b.id}
               className="px-2 py-0.5 rounded bg-[#24201D] border border-[#3B342E] text-[#CEB098] text-[10px]"
@@ -145,7 +151,9 @@ export const ProcedureSpecPanel: React.FC<ProcedureSpecPanelProps> = ({ result }
             >
               {b.mcreatorType}
             </span>
-          ))}
+          )) : (
+            <span className="text-[#6E665C] italic text-[11px]">Loading database…</span>
+          )}
         </div>
       </div>
     </div>

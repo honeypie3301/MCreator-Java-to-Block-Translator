@@ -74,6 +74,7 @@ export default defineConfig(() => {
           manualChunks: {
             'vendor-react': ['react', 'react-dom'],
             'vendor-motion': ['motion', 'lucide-react'],
+            'mcreator-db': ['./src/data/mcreatorBlocksDatabase'],
           },
         },
       },

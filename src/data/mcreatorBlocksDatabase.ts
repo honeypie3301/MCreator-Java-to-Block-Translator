@@ -1,39 +1,11 @@
-import { BlockDefinition, MCreatorElementConfig, MCreatorElementType } from '../types';
+import { BlockDefinition, MCreatorElementType } from '../types';
 
 // Source-backed MCreator NeoForge 1.21.1 Blockly Registry
 // Sourced from MCreator core and plugins/generator-1.21.1/neoforge-1.21.1/
 // Every entry contains complete Blockly structure: fields, value inputs, statement inputs, types, and source references.
 
-export const ELEMENT_CONFIGS: Record<MCreatorElementType, MCreatorElementConfig> = {
-  procedure: {
-    type: 'procedure',
-    extension: '.ptpl',
-    name: 'Procedure',
-    rootTriggerBlock: 'event_trigger',
-    defaultXmlWrapper: 'xml',
-  },
-  ai_task: {
-    type: 'ai_task',
-    extension: '.aitpl',
-    name: 'Entity AI Goal / Task',
-    rootTriggerBlock: 'aitask_wrapper',
-    defaultXmlWrapper: 'xml',
-  },
-  command: {
-    type: 'command',
-    extension: '.cmdtpl',
-    name: 'Command Execution',
-    rootTriggerBlock: 'command_trigger',
-    defaultXmlWrapper: 'xml',
-  },
-  feature: {
-    type: 'feature',
-    extension: '.ftpl',
-    name: 'Worldgen Feature',
-    rootTriggerBlock: 'feature_container',
-    defaultXmlWrapper: 'xml',
-  },
-};
+// Re-export ELEMENT_CONFIGS from the lightweight elementConfigs module for backward compatibility
+export { ELEMENT_CONFIGS } from './elementConfigs';
 
 export const MCREATOR_BLOCK_DATABASE: BlockDefinition[] = [
   // =========================================================================
@@ -4433,7 +4405,7 @@ export const MCREATOR_BLOCK_DATABASE: BlockDefinition[] = [
     blockClassification: 'core_static',
     toolbox: 'Player procedures',
     toolboxPath: 'Player procedures -> Get player food level',
-    javaPatterns: ['.getFoodData().getFoodLevel()'],
+    javaPatterns: ['.getFoodData().getFoodLevel()', '.getFoodLevel()'],
     sourceFile: 'plugins/generator-1.21.1/neoforge-1.21.1/procedures/entity_get_food_level.java.ftl',
     sourceLine: 1,
   },
@@ -7702,7 +7674,7 @@ export const MCREATOR_BLOCK_DATABASE: BlockDefinition[] = [
     nextStatement: false,
     blockClassification: 'built_in',
     toolbox: 'playerdata',
-    javaPatterns: [],
+    javaPatterns: ['.getFoodData().getFoodLevel()', '.getFoodLevel()'],
     sourceFile: 'plugins/mcreator-core/procedures/entity_foodlevel.json',
   },
   {
