@@ -179,9 +179,9 @@ export default function App() {
       )}
 
       {/* Main Grid View */}
-      <main className="flex-1 p-3 sm:p-4 grid grid-cols-1 lg:grid-cols-2 gap-4 max-w-[1800px] w-full mx-auto overflow-hidden">
+      <main className="flex-1 p-2.5 sm:p-3 grid grid-cols-1 lg:grid-cols-12 gap-3 max-w-[1920px] w-full mx-auto overflow-hidden">
         {/* Left Column: Java Code Editor */}
-        <div className="h-[calc(100vh-5.5rem)] min-h-[500px]">
+        <div className="lg:col-span-5 h-[calc(100vh-5.2rem)] min-h-[500px]">
           <JavaEditorPanel
             code={code}
             onChangeCode={(newCode) => {
@@ -194,13 +194,11 @@ export default function App() {
             isTranslating={isTranslating}
             elementType={elementType}
             error={error}
-            selectedLineNumber={selectedLineNumber}
-            onSelectLine={handleSelectLine}
           />
         </div>
 
         {/* Right Column: MCreator Block Translation Canvas */}
-        <div className="h-[calc(100vh-5.5rem)] min-h-[500px] flex flex-col bg-[#181614] border border-[#2E2925] rounded-lg overflow-hidden shadow-sm">
+        <div className="lg:col-span-7 h-[calc(100vh-5.2rem)] min-h-[500px] flex flex-col bg-[#181614] border border-[#2E2925] rounded-lg overflow-hidden shadow-sm">
           {/* Navigation Tabs */}
           <div className="bg-[#121110] border-b border-[#2E2925] px-3 py-2 flex items-center justify-between flex-wrap gap-2 text-xs">
             <div className="flex items-center space-x-1">

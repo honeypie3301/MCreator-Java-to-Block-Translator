@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react';
-import { Play, Trash2, Code2, AlertCircle, Sparkles, Navigation } from 'lucide-react';
+import { Play, Trash2, Code2, AlertCircle, Sparkles } from 'lucide-react';
 import { MCreatorElementType } from '../types';
 import { CustomDropdown } from './CustomDropdown';
 
@@ -37,29 +37,6 @@ const EVENT_TRIGGERS = [
   { id: 'entity_dimension_changed', label: 'When entity changes dimension' },
 ];
 
-const SNIPPET_INSERTERS = [
-  {
-    label: 'NBT & Loops',
-    code: `for (int i = 0; i < 4; i++) {\n    if (tag.contains("pb_x_" + (i + 1))) {\n        double px = tag.getDouble("pb_x_" + (i + 1));\n        tag.putDouble("pb_x_" + (i + 1), px + 0.5);\n    }\n}`,
-  },
-  {
-    label: 'Math & Vectors',
-    code: `double progress = Math.min(1.0, (floatTicks - 25) / 25.0);\ndouble angle = Math.random() * 3.14159 * 2;\ndouble targetX = player.getX() + Math.sin(angle) * 8.0;\ndouble targetZ = player.getZ() + Math.cos(angle) * 8.0;\nentity.setDeltaMovement(new Vec3(targetX - player.getX(), 0.2, targetZ - player.getZ()));`,
-  },
-  {
-    label: 'Block & World',
-    code: `if (!world.isClientSide()) {\n    if (world.getBlockState(pos).isAir()) {\n        world.setBlock(pos, Blocks.STONE.defaultBlockState(), 3);\n        world.playSound("block.stone.place", x, y, z, 1.0f, 1.0f, "blocks");\n    }\n}`,
-  },
-  {
-    label: 'Entity AI Goals',
-    code: `this.goalSelector.addGoal(1, new FloatGoal(this));\nthis.goalSelector.addGoal(2, new PanicGoal(this, 1.25D));\nthis.goalSelector.addGoal(3, new AvoidEntityGoal<>(this, Player.class, 16.0F, 1.0D, 1.3D));\nthis.goalSelector.addGoal(4, new RandomStrollGoal(this, 1.0D));\nthis.goalSelector.addGoal(5, new RandomLookAroundGoal(this));\nthis.targetSelector.addGoal(1, new HurtByTargetGoal(this));`,
-  },
-  {
-    label: 'Damage & Heal',
-    code: `if (event.getSource().getEntity() instanceof Player player) {\n    float dmg = event.getNewDamage();\n    if (dmg > 0) {\n        player.heal(dmg * 0.5f);\n        player.displayClientMessage(Component.literal("Healed!"), true);\n    }\n}`,
-  },
-];
-
 export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
   code,
   onChangeCode,
@@ -69,8 +46,6 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
   isTranslating,
   elementType,
   error,
-  selectedLineNumber,
-  onSelectLine,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
@@ -108,42 +83,10 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
     }
   }, []);
 
-  // Programmatic scroll when selectedLineNumber is set from external click
-  useEffect(() => {
-    if (selectedLineNumber && textareaRef.current) {
-      const targetTop = Math.max(0, (selectedLineNumber - 4) * LINE_HEIGHT);
-      textareaRef.current.scrollTo({ top: targetTop, behavior: 'smooth' });
-    }
-  }, [selectedLineNumber]);
-
-  // Track line click from cursor position in textarea
-  const handleTextareaClick = () => {
-    if (!textareaRef.current || !onSelectLine) return;
-    const pos = textareaRef.current.selectionStart;
-    const clickedLine = code.substring(0, pos).split('\n').length;
-    onSelectLine(clickedLine);
-  };
-
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
       onTranslate();
-    }
-    // Update active line on arrow key movement
-    setTimeout(() => {
-      if (textareaRef.current && onSelectLine) {
-        const pos = textareaRef.current.selectionStart;
-        const currentLine = code.substring(0, pos).split('\n').length;
-        onSelectLine(currentLine);
-      }
-    }, 10);
-  };
-
-  const insertSnippet = (snippetCode: string) => {
-    if (!code.trim()) {
-      onChangeCode(snippetCode);
-    } else {
-      onChangeCode(code + '\n\n' + snippetCode);
     }
   };
 
@@ -171,11 +114,6 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
           <span className="text-[11px] text-[#A39B8E] font-mono">
             {totalLines.toLocaleString()} lines | {charCount.toLocaleString()} chars
           </span>
-          {selectedLineNumber && (
-            <span className="px-1.5 py-0.5 rounded bg-amber-950/70 border border-amber-500/40 text-amber-300 font-mono text-[10px] flex items-center gap-1">
-              <Navigation className="w-2.5 h-2.5" /> Line {selectedLineNumber}
-            </span>
-          )}
         </div>
 
         {elementType === 'procedure' && (
@@ -192,20 +130,6 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
             />
           </div>
         )}
-      </div>
-
-      {/* Snippet Quick Bar */}
-      <div className="bg-[#161412] px-3 py-1.5 border-b border-[#292420] flex items-center space-x-2 text-[11px] overflow-x-auto">
-        <span className="text-[#8C857B] font-mono text-[10px] shrink-0">Quick Snippets:</span>
-        {SNIPPET_INSERTERS.map((s, idx) => (
-          <button
-            key={idx}
-            onClick={() => insertSnippet(s.code)}
-            className="px-2 py-0.5 rounded bg-[#24201D] hover:bg-[#2E2925] text-[#D8C4B6] border border-[#3B342E] transition text-[11px] shrink-0"
-          >
-            + {s.label}
-          </button>
-        ))}
       </div>
 
       {/* Editor Body with Synchronized Gutter */}
@@ -226,21 +150,14 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
             }}
           >
             {visibleLines.map((lineNum) => {
-              const isSelected = selectedLineNumber === lineNum;
               return (
                 <div
                   key={lineNum}
-                  onClick={() => onSelectLine?.(lineNum)}
-                  className={`cursor-pointer transition-colors px-2 leading-[20px] absolute w-full left-0 ${
-                    isSelected
-                      ? 'bg-amber-500/20 text-amber-300 font-bold border-r-2 border-amber-400'
-                      : 'hover:text-[#FAF6F0] hover:bg-[#1f1c19]'
-                  }`}
+                  className="px-2 leading-[20px] absolute w-full left-0 hover:text-[#FAF6F0]"
                   style={{
                     top: `${(lineNum - 1) * LINE_HEIGHT + 12}px`,
                     height: `${LINE_HEIGHT}px`,
                   }}
-                  title={`Click to inspect Blockly block for Line ${lineNum}`}
                 >
                   {lineNum}
                 </div>
@@ -256,8 +173,6 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
             value={code}
             onChange={(e) => onChangeCode(e.target.value)}
             onScroll={handleScroll}
-            onClick={handleTextareaClick}
-            onKeyUp={handleTextareaClick}
             onKeyDown={handleKeyDown}
             wrap="off"
             placeholder="// Enter or paste your NeoForge 1.21.1+ Java code here...

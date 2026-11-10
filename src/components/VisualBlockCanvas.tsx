@@ -13,6 +13,7 @@ import {
   Info,
   X,
   Code2,
+  FileText,
   Layers as LayersIcon,
   HelpCircle,
 } from 'lucide-react';
@@ -41,75 +42,75 @@ const MCREATOR_CATEGORY_THEMES: Record<
   }
 > = {
   event: {
-    headerBg: '#76b852',
-    bodyBg: '#6aa146',
-    border: '#4e7a33',
+    headerBg: '#5ba55b',
+    bodyBg: '#4a894a',
+    border: '#3c6e3c',
     text: '#ffffff',
-    accent: '#a8d87a',
-    badgeBg: '#5a8e3d',
+    accent: '#82d182',
+    badgeBg: '#3d723d',
     badgeText: '#ffffff',
   },
   control: {
-    headerBg: '#4167a8',
-    bodyBg: '#385890',
-    border: '#284370',
+    headerBg: '#5b80a5',
+    bodyBg: '#486887',
+    border: '#354d64',
     text: '#ffffff',
-    accent: '#83a1d4',
-    badgeBg: '#2d4875',
+    accent: '#85a4c4',
+    badgeBg: '#39546f',
     badgeText: '#ffffff',
   },
   logic: {
-    headerBg: '#3b5998',
-    bodyBg: '#324c82',
-    border: '#233761',
+    headerBg: '#5ba58c',
+    bodyBg: '#498671',
+    border: '#376454',
     text: '#ffffff',
-    accent: '#7a94cc',
-    badgeBg: '#273c68',
+    accent: '#88cbba',
+    badgeBg: '#3a6c5b',
     badgeText: '#ffffff',
   },
   entity: {
-    headerBg: '#409fa9',
-    bodyBg: '#338891',
-    border: '#236269',
+    headerBg: '#5ba58c',
+    bodyBg: '#498671',
+    border: '#376454',
     text: '#ffffff',
-    accent: '#82d1d8',
-    badgeBg: '#286d74',
+    accent: '#88cbba',
+    badgeBg: '#3a6c5b',
     badgeText: '#ffffff',
   },
   action: {
-    headerBg: '#b58c42',
-    bodyBg: '#9e7938',
-    border: '#6e5425',
+    headerBg: '#a58c5b',
+    bodyBg: '#877248',
+    border: '#645435',
     text: '#ffffff',
-    accent: '#e2be78',
-    badgeBg: '#7c5f2b',
+    accent: '#c4ad85',
+    badgeBg: '#6f5e39',
     badgeText: '#ffffff',
   },
   world: {
-    headerBg: '#43a047',
-    bodyBg: '#388e3c',
-    border: '#256328',
+    headerBg: '#a58c5b',
+    bodyBg: '#877248',
+    border: '#645435',
     text: '#ffffff',
-    accent: '#81c784',
-    badgeBg: '#2a6b2d',
+    accent: '#c4ad85',
+    badgeBg: '#6f5e39',
     badgeText: '#ffffff',
   },
   math: {
-    headerBg: '#6d7ab8',
-    bodyBg: '#59659e',
-    border: '#3f4873',
+    headerBg: '#5b67a5',
+    bodyBg: '#485387',
+    border: '#353c64',
     text: '#ffffff',
-    accent: '#a5b0e0',
-    badgeBg: '#485282',
+    accent: '#8590c4',
+    badgeBg: '#39426f',
     badgeText: '#ffffff',
   },
   variable: {
-    headerBg: '#8e24aa',
-    bodyBg: '#7b1fa2',
-    border: '#51126d',
+    headerBg: '#a55b80',
+    bodyBg: '#874867',
+    border: '#64354c',
     text: '#ffffff',
-    accent: '#ba68c8',
-    badgeBg: '#611682',
+    accent: '#c485a5',
+    badgeBg: '#6f3954',
     badgeText: '#ffffff',
   },
   ai: {
@@ -248,12 +249,12 @@ const MCREATOR_CATEGORY_THEMES: Record<
     badgeText: '#ffffff',
   },
   code: {
-    headerBg: '#9c27b0',
-    bodyBg: '#7b1fa2',
-    border: '#4a148c',
+    headerBg: '#7b5ba5',
+    bodyBg: '#654887',
+    border: '#4b3564',
     text: '#ffffff',
-    accent: '#e1bee7',
-    badgeBg: '#311b92',
+    accent: '#a085c4',
+    badgeBg: '#53396f',
     badgeText: '#ffffff',
   },
 };
@@ -299,6 +300,22 @@ function checkIsNodeSelected(
     }
     return node.sourceLine === selectedLineNumber;
   }
+  return false;
+}
+
+function hasBlockTypeInAST(node: BlockASTNode, targetType: string): boolean {
+  if (node.type === targetType) return true;
+  if (node.values) {
+    for (const v of node.values) {
+      if (v.block && hasBlockTypeInAST(v.block, targetType)) return true;
+    }
+  }
+  if (node.statements) {
+    for (const s of node.statements) {
+      if (s.block && hasBlockTypeInAST(s.block, targetType)) return true;
+    }
+  }
+  if (node.next && hasBlockTypeInAST(node.next, targetType)) return true;
   return false;
 }
 
@@ -547,6 +564,14 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
         </div>
       </div>
 
+      {/* MCreator Errors / Warnings Notification Strip */}
+      {hasBlockTypeInAST(ast, 'entity_nbt_num_set') && (
+        <div className="bg-[#12141a] px-3.5 py-1.5 border-t border-[#2d323e] text-[#e06c75] font-mono text-[11px] flex items-center gap-2 select-text">
+          <span className="font-bold">errors (1):</span>
+          <span>entity_nbt_num_set is not synced between client and server automatically, which means it may not work properly in some cases.</span>
+        </div>
+      )}
+
       {/* MCreator Palette Legend Footer */}
       <div className="bg-[#1a1d24] px-3 py-1.5 border-t border-[#2d323e] flex items-center justify-between flex-wrap gap-2 text-[10px] text-[#7e889b]">
         <div className="flex items-center flex-wrap gap-2">
@@ -702,7 +727,9 @@ const BlocklyNodeRenderer: React.FC<{
           <button className="p-0.5 rounded hover:bg-black/20 text-white/90" title="Block Settings">
             <Settings className="w-3 h-3" />
           </button>
-          <span className="font-bold text-[11px] tracking-wide">{node.title || node.type}</span>
+          {node.type !== 'world_entity_inrange_foreach' && (
+            <span className="font-bold text-[11px] tracking-wide">{node.title || node.type}</span>
+          )}
           {node.sourceLine && (
             <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono">
               L{node.sourceLine}
@@ -710,7 +737,7 @@ const BlocklyNodeRenderer: React.FC<{
           )}
 
           {/* Fields */}
-          {node.fields && Object.keys(node.fields).length > 0 && (
+          {node.fields && Object.keys(node.fields).length > 0 && node.type !== 'world_entity_inrange_foreach' && (
             <div className="flex items-center gap-1">
               {Object.entries(node.fields).map(([k, v]) => (
                 <div key={k} className="flex items-center gap-1 bg-black/20 px-1.5 py-0.2 rounded border border-black/20">
@@ -751,22 +778,59 @@ const BlocklyNodeRenderer: React.FC<{
           ) : node.type === 'controls_if' ? (
             (() => {
               const if0 = node.values?.find(v => v.name === 'IF0');
-              return if0 ? (
-                <div className="flex items-center gap-1 bg-black/25 px-1.5 py-0.5 rounded border border-black/30">
-                  <span className="text-white/70 text-[9px] font-semibold">condition:</span>
-                  {if0.block ? (
-                    <InlineValueBlock
-                      node={if0.block}
-                      selectedLineNumber={selectedLineNumber}
-                      selectedBlockId={selectedBlockId}
-                      onSelectBlock={onSelectBlock}
-                    />
-                  ) : (
-                    <span className="text-white/40 text-[9px] italic">🧩 &lt;socket&gt;</span>
-                  )}
+              return if0?.block ? (
+                <div className="flex items-center gap-1.5 flex-1">
+                  <InlineValueBlock
+                    node={if0.block}
+                    selectedLineNumber={selectedLineNumber}
+                    selectedBlockId={selectedBlockId}
+                    onSelectBlock={onSelectBlock}
+                  />
                 </div>
               ) : null;
             })()
+          ) : node.type === 'world_entity_inrange_foreach' ? (
+            <div className="flex items-center gap-1.5 flex-wrap text-[11px] font-bold text-white flex-1">
+              <span>For each entity as</span>
+              <div className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#48836f]">
+                Entity iterator
+              </div>
+              <span>at x:</span>
+              <div className="bg-[#5b80a5] text-white px-2 py-0.5 rounded font-mono font-bold shadow-sm border border-[#486683]">
+                x
+              </div>
+              <span>y:</span>
+              <div className="bg-[#5b80a5] text-white px-2 py-0.5 rounded font-mono font-bold shadow-sm border border-[#486683]">
+                y
+              </div>
+              <span>z:</span>
+              <div className="bg-[#5b80a5] text-white px-2 py-0.5 rounded font-mono font-bold shadow-sm border border-[#486683]">
+                z
+              </div>
+              <span>in square cube with size</span>
+              {node.values?.find(v => v.name === 'range')?.block && (
+                <InlineValueBlock
+                  node={node.values.find(v => v.name === 'range')!.block!}
+                  selectedLineNumber={selectedLineNumber}
+                  selectedBlockId={selectedBlockId}
+                  onSelectBlock={onSelectBlock}
+                />
+              )}
+            </div>
+          ) : node.type === 'wait_ticks' ? (
+            <div className="flex items-center gap-1.5 flex-wrap text-[11px] font-bold text-white flex-1">
+              <span>Run task after</span>
+              {node.values?.find(v => v.name === 'ticks')?.block && (
+                <InlineValueBlock
+                  node={node.values.find(v => v.name === 'ticks')!.block!}
+                  selectedLineNumber={selectedLineNumber}
+                  selectedBlockId={selectedBlockId}
+                  onSelectBlock={onSelectBlock}
+                />
+              )}
+              <span>ticks on server-side</span>
+              <FileText className="w-3.5 h-3.5 ml-auto text-white/80" />
+            </div>
           ) : (
             node.values && node.values.length > 0 && (
               <div className="flex items-center gap-1 flex-wrap flex-1">
@@ -813,20 +877,17 @@ const BlocklyNodeRenderer: React.FC<{
                 {/* Arm Divider / Header for else-if and else branches */}
                 {node.type === 'controls_if' && s.name !== 'DO0' && (
                   <div
-                    className="flex items-center gap-2 px-2 py-1 border-t border-b text-[11px] font-bold text-white/95 select-none shadow-sm"
+                    className="flex items-center gap-2 px-2.5 py-1 border-t border-b text-[11px] font-bold text-white/95 select-none shadow-sm"
                     style={{ backgroundColor: theme.headerBg, borderColor: theme.border }}
                   >
                     <span>{armLabel}</span>
                     {armSocket && (
-                      <div className="flex items-center gap-1 bg-black/25 px-1.5 py-0.5 rounded border border-black/30">
-                        <span className="text-white/70 text-[9px] font-semibold">condition:</span>
-                        <InlineValueBlock
-                          node={armSocket}
-                          selectedLineNumber={selectedLineNumber}
-                          selectedBlockId={selectedBlockId}
-                          onSelectBlock={onSelectBlock}
-                        />
-                      </div>
+                      <InlineValueBlock
+                        node={armSocket}
+                        selectedLineNumber={selectedLineNumber}
+                        selectedBlockId={selectedBlockId}
+                        onSelectBlock={onSelectBlock}
+                      />
                     )}
                   </div>
                 )}
@@ -928,8 +989,8 @@ const BlocklyNodeRenderer: React.FC<{
           }}
         >
           <span className="font-bold text-[11px]">Set {typeLabel}</span>
-          <span className="font-mono font-bold bg-[#1e293b] border border-blue-400/40 px-2 py-0.5 rounded text-blue-300 text-[10px]">
-            Local: {varName}
+          <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+            Local: {varName} <ChevronDown className="w-3 h-3 opacity-70" />
           </span>
           <span className="font-bold text-[11px]">to:</span>
           {valBlock ? (
@@ -1008,6 +1069,97 @@ const BlocklyNodeRenderer: React.FC<{
               L{node.sourceLine}
             </span>
           )}
+        </div>
+
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer
+              node={node.next}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 2.7.4 MOVE ENTITY (Set location of [entity] to x: [x] y: [y] z: [z])
+  if (node.type === 'move_entity') {
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    const xBlock = node.values?.find(v => v.name === 'x')?.block;
+    const yBlock = node.values?.find(v => v.name === 'y')?.block;
+    const zBlock = node.values?.find(v => v.name === 'z')?.block;
+
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelectBlock?.(node.id, node.sourceLine);
+        }}
+        className={`flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all ${
+          isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded-md shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
+        }`}
+      >
+        <div
+          className="rounded-md px-3 py-2 text-white shadow border flex flex-col gap-1.5 min-w-[280px]"
+          style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
+        >
+          <div className="flex items-center gap-1.5 text-[11px] font-bold">
+            <span>Set location of</span>
+            {entBlock ? (
+              <InlineValueBlock
+                node={entBlock}
+                selectedLineNumber={selectedLineNumber}
+                selectedBlockId={selectedBlockId}
+                onSelectBlock={onSelectBlock}
+              />
+            ) : (
+              <div className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#48836f] text-[10.5px]">
+                Event/target entity
+              </div>
+            )}
+            {node.sourceLine && (
+              <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
+                L{node.sourceLine}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 text-[11px] font-bold pl-1">
+            <span className="w-8 text-right font-medium text-white/90">to x:</span>
+            {xBlock && (
+              <InlineValueBlock
+                node={xBlock}
+                selectedLineNumber={selectedLineNumber}
+                selectedBlockId={selectedBlockId}
+                onSelectBlock={onSelectBlock}
+              />
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 text-[11px] font-bold pl-1">
+            <span className="w-8 text-right font-medium text-white/90">y:</span>
+            {yBlock && (
+              <InlineValueBlock
+                node={yBlock}
+                selectedLineNumber={selectedLineNumber}
+                selectedBlockId={selectedBlockId}
+                onSelectBlock={onSelectBlock}
+              />
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 text-[11px] font-bold pl-1">
+            <span className="w-8 text-right font-medium text-white/90">z:</span>
+            {zBlock && (
+              <InlineValueBlock
+                node={zBlock}
+                selectedLineNumber={selectedLineNumber}
+                selectedBlockId={selectedBlockId}
+                onSelectBlock={onSelectBlock}
+              />
+            )}
+          </div>
         </div>
 
         {node.next && (
@@ -1110,6 +1262,21 @@ const BlocklyNodeRenderer: React.FC<{
               {tagHolderBlock ? <InlineValueBlock node={tagHolderBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} /> : <span className="text-white/70 text-[10px]">CompoundTag</span>}
               <span className="font-bold text-[11px]">to:</span>
               {childTagBlock && <InlineValueBlock node={childTagBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+            </>
+          ) : node.type.startsWith('entity_nbt_') ? (
+            <>
+              <span className="font-bold text-[11px]">Set</span>
+              {entityBlock ? (
+                <InlineValueBlock node={entityBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+              ) : (
+                <div className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#48836f] text-[10.5px]">
+                  Event/target entity
+                </div>
+              )}
+              <span className="font-bold text-[11px]">custom {typeLabel.toLowerCase()} NBT tag</span>
+              {tagName && <InlineValueBlock node={tagName} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+              <span className="font-bold text-[11px]">to</span>
+              {tagVal && <InlineValueBlock node={tagVal} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
             </>
           ) : (
             <>
@@ -1305,6 +1472,243 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
+  // 2.6.5 Entity Data Parameter Set, Potion, Attribute Blocks
+  if (
+    node.type === 'entity_data_logic_set' ||
+    node.type === 'entity_data_integer_set' ||
+    node.type === 'entity_data_string_set' ||
+    node.type === 'entity_add_potion_advanced' ||
+    node.type === 'entity_set_attribute'
+  ) {
+    const isEntityData = node.type.startsWith('entity_data_');
+    const isPotion = node.type === 'entity_add_potion_advanced';
+    const isAttr = node.type === 'entity_set_attribute';
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelectBlock?.(node.id, node.sourceLine);
+        }}
+        className={`flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all ${
+          isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded-md shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
+        }`}
+      >
+        <div
+          className="rounded-md px-2.5 py-1.5 text-white shadow border flex items-center gap-1.5 flex-wrap min-w-[280px]"
+          style={{ backgroundColor: theme.headerBg, borderColor: theme.border }}
+        >
+          {isEntityData ? (
+            <>
+              <span className="font-bold text-[11px]">For custom entity</span>
+              {entBlock ? (
+                <InlineValueBlock node={entBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+              ) : (
+                <div className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#48836f] text-[10.5px]">
+                  Event/target entity
+                </div>
+              )}
+              <span className="font-bold text-[11px]">of type</span>
+              <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+                {node.fields?.customEntity?.replace('CUSTOM:', '') || 'CustomEntity'} <ChevronDown className="w-3 h-3 opacity-70" />
+              </span>
+              <span className="font-bold text-[11px]">set {node.type.includes('_logic_') ? 'logic' : node.type.includes('_string_') ? 'string' : 'integer'} data parameter</span>
+              <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+                {node.fields?.accessor || 'param'} <ChevronDown className="w-3 h-3 opacity-70" />
+              </span>
+              <span className="font-bold text-[11px]">value to</span>
+              {node.values?.find(v => v.name === 'value')?.block && (
+                <InlineValueBlock node={node.values.find(v => v.name === 'value')!.block!} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+              )}
+            </>
+          ) : isPotion ? (
+            <>
+              <span className="font-bold text-[11px]">Add potion</span>
+              <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+                {node.fields?.potion || 'Regeneration'} <ChevronDown className="w-3 h-3 opacity-70" />
+              </span>
+              <span className="font-bold text-[11px]">with amplifier</span>
+              {node.values?.find(v => v.name === 'level')?.block && (
+                <InlineValueBlock node={node.values.find(v => v.name === 'level')!.block!} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+              )}
+              <span className="font-bold text-[11px]">for</span>
+              {node.values?.find(v => v.name === 'duration')?.block && (
+                <InlineValueBlock node={node.values.find(v => v.name === 'duration')!.block!} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+              )}
+              <span className="font-bold text-[11px]">ticks ambient</span>
+              {node.values?.find(v => v.name === 'ambient')?.block && (
+                <InlineValueBlock node={node.values.find(v => v.name === 'ambient')!.block!} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+              )}
+              <span className="font-bold text-[11px]">particles</span>
+              {node.values?.find(v => v.name === 'particles')?.block && (
+                <InlineValueBlock node={node.values.find(v => v.name === 'particles')!.block!} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+              )}
+              <span className="font-bold text-[11px]">to</span>
+              {entBlock ? (
+                <InlineValueBlock node={entBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+              ) : (
+                <div className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#48836f] text-[10.5px]">
+                  Event/target entity
+                </div>
+              )}
+            </>
+          ) : isAttr ? (
+            <>
+              <span className="font-bold text-[11px]">Set the base value of attribute</span>
+              <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+                {node.explanation?.replace(/^Set attribute /, '').replace(/ base value to.*$/, '') || node.title?.replace(/^Set attribute /, '') || 'Water movement efficiency'} <ChevronDown className="w-3 h-3 opacity-70" />
+              </span>
+              <span className="font-bold text-[11px]">to</span>
+              {node.values?.find(v => v.name === 'value')?.block && (
+                <InlineValueBlock node={node.values.find(v => v.name === 'value')!.block!} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+              )}
+              <span className="font-bold text-[11px]">for entity</span>
+              {entBlock ? (
+                <InlineValueBlock node={entBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+              ) : (
+                <div className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#48836f] text-[10.5px]">
+                  Event/target entity
+                </div>
+              )}
+            </>
+          ) : null}
+        </div>
+
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer
+              node={node.next}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 2.6.8 SPAWN ENTITY (with rotation & velocity)
+  if (node.type === 'spawn_entity_with_rotation_velocity' || node.type === 'spawn_entity') {
+    const cleanEntName = node.fields?.entity?.replace('CUSTOM:', '') || 'CustomEntity';
+    const xBlock = node.values?.find(v => v.name === 'x')?.block;
+    const yBlock = node.values?.find(v => v.name === 'y')?.block;
+    const zBlock = node.values?.find(v => v.name === 'z')?.block;
+    const yawBlock = node.values?.find(v => v.name === 'yaw')?.block;
+    const pitchBlock = node.values?.find(v => v.name === 'pitch')?.block;
+    const vxBlock = node.values?.find(v => v.name === 'vx')?.block;
+    const vyBlock = node.values?.find(v => v.name === 'vy')?.block;
+    const vzBlock = node.values?.find(v => v.name === 'vz')?.block;
+
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelectBlock?.(node.id, node.sourceLine);
+        }}
+        className={`flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all ${
+          isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded-md shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
+        }`}
+      >
+        <div
+          className="rounded-md px-2.5 py-1.5 text-white shadow border flex items-center gap-1.5 flex-wrap min-w-[320px]"
+          style={{ backgroundColor: '#a58c5b', borderColor: '#877248' }}
+        >
+          <span className="font-bold text-[11px]">Spawn entity:</span>
+          <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+            {cleanEntName} <ChevronDown className="w-3 h-3 opacity-70" />
+          </span>
+          <span className="font-bold text-[11px]">at x:</span>
+          {xBlock && <InlineValueBlock node={xBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">y:</span>
+          {yBlock && <InlineValueBlock node={yBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">z:</span>
+          {zBlock && <InlineValueBlock node={zBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">with yaw:</span>
+          {yawBlock && <InlineValueBlock node={yawBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">pitch:</span>
+          {pitchBlock && <InlineValueBlock node={pitchBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">vx:</span>
+          {vxBlock && <InlineValueBlock node={vxBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">vy:</span>
+          {vyBlock && <InlineValueBlock node={vyBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">vz:</span>
+          {vzBlock && <InlineValueBlock node={vzBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <FileText className="w-3.5 h-3.5 ml-auto text-white/80" />
+        </div>
+
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer
+              node={node.next}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 2.6.9 SPAWN DROPPED ITEM (spawn_gem)
+  if (node.type === 'spawn_gem') {
+    const itemBlock = node.values?.find(v => v.name === 'block')?.block;
+    const xBlock = node.values?.find(v => v.name === 'x')?.block;
+    const yBlock = node.values?.find(v => v.name === 'y')?.block;
+    const zBlock = node.values?.find(v => v.name === 'z')?.block;
+    const delayBlock = node.values?.find(v => v.name === 'pickUpDelay')?.block;
+    const isDespawn = node.fields?.despawn !== 'FALSE';
+
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelectBlock?.(node.id, node.sourceLine);
+        }}
+        className={`flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all ${
+          isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded-md shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
+        }`}
+      >
+        <div
+          className="rounded-md px-2.5 py-1.5 text-white shadow border flex items-center gap-1.5 flex-wrap min-w-[320px]"
+          style={{ backgroundColor: '#a58c5b', borderColor: '#877248' }}
+        >
+          <span className="font-bold text-[11px]">Spawn dropped item</span>
+          {itemBlock && <InlineValueBlock node={itemBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">at x:</span>
+          {xBlock && <InlineValueBlock node={xBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">y:</span>
+          {yBlock && <InlineValueBlock node={yBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">z:</span>
+          {zBlock && <InlineValueBlock node={zBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">pickup delay:</span>
+          {delayBlock && <InlineValueBlock node={delayBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">despawn:</span>
+          <span className="bg-[#14171d]/60 border border-white/20 text-white font-mono text-[11px] px-1.5 py-0.2 rounded">
+            {isDespawn ? '✓' : '✗'}
+          </span>
+          <FileText className="w-3.5 h-3.5 ml-auto text-white/80" />
+        </div>
+
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer
+              node={node.next}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // 2.7 Call Procedure Block
   if (node.type === 'call_procedure') {
     const procName = node.fields?.procedure || 'procedure';
@@ -1382,25 +1786,21 @@ const BlocklyNodeRenderer: React.FC<{
           isSelected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-[#14171d] rounded-md shadow-[0_0_15px_rgba(251,191,36,0.5)]' : ''
         }`}
       >
-        <div className="rounded-md px-3 py-2 text-white shadow border flex flex-col gap-1.5 min-w-[280px] border-dashed border-amber-400 bg-[#241f17]">
-          <div className="flex items-center justify-between text-amber-300 font-bold text-[11px] border-b border-amber-500/20 pb-1">
-            <span className="flex items-center gap-1.5">
-              <span className="text-amber-400 font-mono">⚡</span> Custom code snippet (Statement)
-            </span>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-950/80 border border-amber-500/30 text-amber-200 font-mono">
-                Statement
-              </span>
-              {node.sourceLine && (
-                <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono">
-                  L{node.sourceLine}
-                </span>
-              )}
-            </div>
+        <div
+          className="rounded-md px-3 py-2 text-white shadow border flex items-start gap-2.5 min-w-[340px]"
+          style={{ backgroundColor: '#7b5ba5', borderColor: '#654887' }}
+        >
+          <div className="font-bold text-[11px] whitespace-nowrap pt-1">
+            Custom code snippet:
           </div>
-          <div className="bg-black/60 border border-amber-500/30 rounded p-1.5 font-mono text-[11px] text-amber-100 whitespace-pre-wrap break-all">
+          <div className="flex-1 bg-[#37244f] border border-[#261738] rounded p-2 font-mono text-[11px] text-white whitespace-pre-wrap leading-relaxed shadow-inner">
             {node.fields?.CODE || '/* verbatim java statement */'}
           </div>
+          {node.sourceLine && (
+            <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
+              L{node.sourceLine}
+            </span>
+          )}
         </div>
 
         {node.next && (
@@ -1635,16 +2035,17 @@ const InlineValueBlock: React.FC<{
           e.stopPropagation();
           onSelectBlock?.(node.id, node.sourceLine);
         }}
-        className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] bg-blue-950/70 border border-blue-400/50 text-blue-200 shadow-xs cursor-pointer shrink-0 ${
+        className={`px-2.5 py-0.5 rounded-full font-sans font-bold text-[11px] text-white shadow-xs border cursor-pointer shrink-0 ${
           isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
         }`}
+        style={{ backgroundColor: '#5b67a5', borderColor: '#485387' }}
       >
         {node.fields?.NUM ?? node.title ?? '0'}
       </div>
     );
   }
 
-  // Text Literal: [ "text" ]
+  // Text Literal: “ text ”
   if (node.type === 'text') {
     const textVal = node.fields?.TEXT ?? (node.title ? node.title.replace(/^"|"$/g, '') : '');
     return (
@@ -1653,18 +2054,19 @@ const InlineValueBlock: React.FC<{
           e.stopPropagation();
           onSelectBlock?.(node.id, node.sourceLine);
         }}
-        className={`px-2 py-0.5 rounded font-mono font-medium text-[10.5px] bg-emerald-950/80 border border-emerald-500/50 text-emerald-200 shadow-xs flex items-center gap-1 cursor-pointer shrink-0 ${
+        className={`px-2 py-0.5 rounded font-mono font-medium text-[11px] text-white shadow-xs flex items-center gap-1 cursor-pointer shrink-0 border ${
           isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
         }`}
+        style={{ backgroundColor: '#5ba55b', borderColor: '#4d8c4d' }}
       >
-        <span className="text-emerald-400/80 select-none font-sans text-[12px]">"</span>
+        <span className="text-white/80 select-none text-[13px] font-sans">“</span>
         <span>{textVal}</span>
-        <span className="text-emerald-400/80 select-none font-sans text-[12px]">"</span>
+        <span className="text-white/80 select-none text-[13px] font-sans">”</span>
       </div>
     );
   }
 
-  // Variables Getter: Get number [Local: var]
+  // Variables Getter: Get number [Local: var ▾]
   if (
     node.type === 'variables_get_number' ||
     node.type === 'variables_get_logic' ||
@@ -1682,12 +2084,226 @@ const InlineValueBlock: React.FC<{
         className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
           isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
         }`}
-        style={{ backgroundColor: theme.headerBg, borderColor: theme.border }}
+        style={{ backgroundColor: '#a55b80', borderColor: '#874867' }}
       >
-        <span className="font-medium text-[10px] text-white/90">Get {typeLabel}</span>
-        <span className="font-mono font-bold bg-[#1e293b] border border-blue-400/40 px-1.5 py-0.2 rounded text-blue-300 text-[10px]">
-          Local: {varName}
+        <span className="font-medium text-[10.5px] text-white/95">Get {typeLabel}</span>
+        <span className="bg-white/95 text-[#14171d] font-bold px-1.5 py-0.2 rounded text-[10.5px] flex items-center gap-1 shadow-xs">
+          Local: {varName} <ChevronDown className="w-2.5 h-2.5 opacity-70" />
         </span>
+      </div>
+    );
+  }
+
+  // Entity Is Tagged In: Is [entity] tagged in entity tags as [ “tag” ]
+  if (node.type === 'entity_is_tagged_in') {
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    const tagBlock = node.values?.find(v => v.name === 'tag')?.block;
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelectBlock?.(node.id, node.sourceLine);
+        }}
+        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
+          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+        }`}
+        style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
+      >
+        <span className="font-bold text-[11px]">Is</span>
+        {entBlock ? (
+          <InlineValueBlock
+            node={entBlock}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        ) : (
+          <div className="bg-[#5ba58c] text-white px-1.5 py-0.2 rounded shadow-sm font-semibold border border-black/20 text-[10.5px]">
+            Event/target entity
+          </div>
+        )}
+        <span className="font-bold text-[11px]">tagged in entity tags as</span>
+        {tagBlock && (
+          <InlineValueBlock
+            node={tagBlock}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // Entity Check Creative Mode: Has [ Event/target entity ] creative mode ability enabled
+  if (node.type === 'entity_iscreative') {
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelectBlock?.(node.id, node.sourceLine);
+        }}
+        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
+          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+        }`}
+        style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
+      >
+        <span className="font-bold text-[11px]">Has</span>
+        {entBlock ? (
+          <InlineValueBlock
+            node={entBlock}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        ) : (
+          <div className="bg-[#5ba58c] text-white px-1.5 py-0.2 rounded shadow-sm font-semibold border border-black/20 text-[10.5px]">
+            Event/target entity
+          </div>
+        )}
+        <span className="font-bold text-[11px]">creative mode ability enabled</span>
+      </div>
+    );
+  }
+
+  // Math Dual Ops: Random [0,1)
+  if (node.type === 'math_dual_ops' && (node.fields?.OP === 'RANDOM' || node.title?.includes('Random'))) {
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelectBlock?.(node.id, node.sourceLine);
+        }}
+        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
+          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+        }`}
+        style={{ backgroundColor: '#5b67a5', borderColor: '#485387' }}
+      >
+        <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+          Random [0,1) <ChevronDown className="w-3 h-3 opacity-70" />
+        </span>
+      </div>
+    );
+  }
+
+  // World Data Check Difficulty: Is difficulty in the provided world [ HARD ▾ ]
+  if (node.type === 'world_data_checkdifficulty') {
+    const diff = node.fields?.difficulty || 'HARD';
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelectBlock?.(node.id, node.sourceLine);
+        }}
+        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
+          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+        }`}
+        style={{ backgroundColor: '#5b80a5', borderColor: '#486887' }}
+      >
+        <span className="font-bold text-[11px]">Is difficulty in the provided world</span>
+        <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+          {diff} <ChevronDown className="w-3 h-3 opacity-70" />
+        </span>
+      </div>
+    );
+  }
+
+  // World Data Height At: Get [ World surface ▾ ] height at x: [ x ] z: [ z ]
+  if (node.type === 'world_data_heightat') {
+    const rawType = node.fields?.heightmapType || 'MOTION_BLOCKING_NO_LEAVES';
+    const label = rawType.includes('OCEAN') ? 'Ocean floor' : rawType.includes('WG') ? 'World surface (world gen)' : 'World surface';
+    const xBlock = node.values?.find(v => v.name === 'x')?.block;
+    const zBlock = node.values?.find(v => v.name === 'z')?.block;
+
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelectBlock?.(node.id, node.sourceLine);
+        }}
+        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
+          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+        }`}
+        style={{ backgroundColor: '#5b80a5', borderColor: '#486887' }}
+      >
+        <span className="font-bold text-[11px]">Get</span>
+        <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+          {label} <ChevronDown className="w-3 h-3 opacity-70" />
+        </span>
+        <span className="font-bold text-[11px]">height at x:</span>
+        {xBlock && (
+          <InlineValueBlock
+            node={xBlock}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        )}
+        <span className="font-bold text-[11px]">z:</span>
+        {zBlock && (
+          <InlineValueBlock
+            node={zBlock}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // Entity Dependencies: Event/target entity
+  if (node.type === 'entity_from_deps') {
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelectBlock?.(node.id, node.sourceLine);
+        }}
+        className={`px-2 py-0.5 rounded text-white font-sans font-semibold text-[11px] shadow-xs border cursor-pointer shrink-0 ${
+          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+        }`}
+        style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
+      >
+        Event/target entity
+      </div>
+    );
+  }
+
+  // Entity Iterator: Entity iterator
+  if (node.type === 'entity_iterator') {
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelectBlock?.(node.id, node.sourceLine);
+        }}
+        className={`px-2 py-0.5 rounded text-white font-sans font-semibold text-[11px] shadow-xs border cursor-pointer shrink-0 ${
+          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+        }`}
+        style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
+      >
+        Entity iterator
+      </div>
+    );
+  }
+
+  // Coordinate getters: x, y, z
+  if (node.type === 'coord_x' || node.type === 'coord_y' || node.type === 'coord_z') {
+    const coord = node.type === 'coord_x' ? 'x' : node.type === 'coord_y' ? 'y' : 'z';
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelectBlock?.(node.id, node.sourceLine);
+        }}
+        className={`px-2 py-0.5 rounded text-white font-mono font-bold text-[11px] shadow-xs border cursor-pointer shrink-0 ${
+          isSelected ? 'ring-2 ring-amber-400 shadow-md' : ''
+        }`}
+        style={{ backgroundColor: '#5b80a5', borderColor: '#486887' }}
+      >
+        {coord}
       </div>
     );
   }
@@ -1738,13 +2354,14 @@ const InlineValueBlock: React.FC<{
           e.stopPropagation();
           onSelectBlock?.(node.id, node.sourceLine);
         }}
-        className={`px-2 py-0.5 rounded-[4px] border border-[#52467d] bg-[#6c61a1] text-white font-sans text-[10.5px] flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0 transition-all ${
+        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 transition-all ${
           isSelected ? 'ring-2 ring-amber-400 shadow-md scale-[1.02]' : 'hover:brightness-110'
         }`}
+        style={{ backgroundColor: '#7b5ba5', borderColor: '#654887' }}
         title="Custom code snippet (Expression/Value)"
       >
-        <span className="font-semibold text-white/95 text-[10px] whitespace-nowrap">Custom code snippet:</span>
-        <span className="bg-[#4d4277] border border-[#3c335e] px-1.5 py-0.2 rounded text-[10px] text-white font-mono font-medium shadow-inner">
+        <span className="font-semibold text-white/95 text-[10.5px] whitespace-nowrap">Custom code snippet:</span>
+        <span className="bg-[#4d326f] border border-[#3b2358] px-1.5 py-0.2 rounded text-[10.5px] text-white font-mono font-medium shadow-inner max-w-[360px] truncate">
           {displayVal}
         </span>
       </div>

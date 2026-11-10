@@ -933,6 +933,459 @@ function parseJavaStatement(
   return node;
 }
 
+function parseWorldEntityInRangeForeach(
+  stmt: string,
+  idSeq: number,
+  variables: VariableDecl[],
+  breakdown: TranslationBreakdownItem[],
+  elementType: MCreatorElementType,
+  startLine?: number,
+  endLine?: number
+): BlockASTNode {
+  let xExpr = 'x';
+  let yExpr = 'y';
+  let zExpr = 'z';
+  const vecMatch = stmt.match(/new\s+Vec3\(([^,]+),\s*([^,]+),\s*([^)]+)\)/);
+  if (vecMatch) {
+    xExpr = vecMatch[1].trim();
+    yExpr = vecMatch[2].trim();
+    zExpr = vecMatch[3].trim();
+  }
+
+  let rangeExpr = '10';
+  const inflateMatch = stmt.match(/\.inflate\(([\s\S]+?)\s*\/\s*2d\)/);
+  if (inflateMatch) {
+    rangeExpr = inflateMatch[1].trim();
+  } else {
+    const rawInflate = stmt.match(/\.inflate\(([^)]+)\)/);
+    if (rawInflate) {
+      rangeExpr = rawInflate[1].trim();
+    }
+  }
+
+  let loopBody = '';
+  const forMatch = stmt.match(/for\s*\(\s*Entity\s+entityiterator\s*:\s*[\s\S]+?\)\s*\{/);
+  if (forMatch && forMatch.index !== undefined) {
+    const forStart = stmt.substring(forMatch.index);
+    loopBody = extractBlockBody(forStart);
+  } else {
+    loopBody = extractBlockBody(stmt);
+  }
+
+  let bodyLine = startLine !== undefined ? startLine : undefined;
+  if (startLine !== undefined && loopBody) {
+    const bodyIdx = stmt.indexOf(loopBody);
+    if (bodyIdx !== -1) {
+      const linesBefore = stmt.substring(0, bodyIdx).split('\n').length - 1;
+      bodyLine = startLine + linesBefore;
+    }
+  }
+
+  const innerStmts = splitStatementsWithLocations(loopBody, bodyLine);
+  const innerNodes = innerStmts
+    .map((s, idx) => parseJavaStatement(s.text, idSeq * 100 + idx, variables, breakdown, elementType, s.startLine, s.endLine))
+    .filter((n): n is BlockASTNode => n !== null);
+
+  breakdown.push({
+    javaLine: `For each entity as [Entity iterator] in cube`,
+    lineNumber: startLine,
+    blockId: `inrange_${idSeq}`,
+    mcreatorBlock: 'world_entity_inrange_foreach',
+    explanation: `For each entity in square cube with size ${rangeExpr} at (${xExpr}, ${yExpr}, ${zExpr})`,
+  });
+
+  return {
+    id: `inrange_${idSeq}`,
+    type: 'world_entity_inrange_foreach',
+    category: 'world',
+    title: 'For each entity as [Entity iterator] in square cube',
+    sourceLine: startLine,
+    sourceEndLine: endLine,
+    values: [
+      {
+        name: '_placeholder',
+        block: {
+          id: `iter_${idSeq}`,
+          type: 'entity_iterator',
+          category: 'entity',
+          title: 'Entity iterator',
+        },
+      },
+      { name: 'x', block: parseExpressionToAST(xExpr, idSeq * 10 + 1) },
+      { name: 'y', block: parseExpressionToAST(yExpr, idSeq * 10 + 2) },
+      { name: 'z', block: parseExpressionToAST(zExpr, idSeq * 10 + 3) },
+      { name: 'range', block: parseExpressionToAST(rangeExpr, idSeq * 10 + 4) },
+    ],
+    statements: [
+      { name: 'foreach', block: innerNodes.length > 0 ? chainNodes(innerNodes) : undefined },
+    ],
+  };
+}
+
+function parseEntityNbtSetStatement(
+  rawTarget: string,
+  method: string,
+  keyExpr: string,
+  valExpr: string,
+  idSeq: number,
+  breakdown: TranslationBreakdownItem[],
+  startLine?: number,
+  endLine?: number
+): BlockASTNode {
+  const isNum = method === 'putDouble' || method === 'putInt' || method === 'putFloat';
+  const isBool = method === 'putBoolean';
+  const blockType = isNum ? 'entity_nbt_num_set' : isBool ? 'entity_nbt_logic_set' : 'entity_nbt_text_set';
+
+  const cleanKey = keyExpr.trim().replace(/^["']|["']$/g, '');
+  const keyAST: BlockASTNode = {
+    id: `nbt_key_${idSeq}`,
+    type: 'text',
+    category: 'text',
+    title: `"${cleanKey}"`,
+    fields: { TEXT: cleanKey },
+  };
+
+  const valAST = parseExpressionToAST(valExpr, idSeq * 10 + 2);
+
+  const isIterator = rawTarget.includes('entityiterator') || rawTarget.includes('_ent');
+  const targetAST: BlockASTNode = isIterator
+    ? { id: `iter_${idSeq}`, type: 'entity_iterator', category: 'entity', title: 'Entity iterator' }
+    : { id: `ent_dep_${idSeq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' };
+
+  breakdown.push({
+    javaLine: `${rawTarget}.getPersistentData().${method}("${cleanKey}", ${valExpr})`,
+    lineNumber: startLine,
+    blockId: `nbt_set_${idSeq}`,
+    mcreatorBlock: blockType,
+    explanation: `Set entity custom NBT tag '${cleanKey}' to ${valExpr}`,
+  });
+
+  return {
+    id: `nbt_set_${idSeq}`,
+    type: blockType,
+    category: 'entity',
+    title: `Set [Entity] custom ${isNum ? 'number' : isBool ? 'logic' : 'text'} NBT tag`,
+    sourceLine: startLine,
+    sourceEndLine: endLine,
+    values: [
+      { name: 'entity', block: targetAST },
+      { name: 'tagName', block: keyAST },
+      { name: 'tagValue', block: valAST },
+    ],
+  };
+}
+
+function parseMoveEntityStatement(
+  stmt: string,
+  idSeq: number,
+  variables: VariableDecl[],
+  breakdown: TranslationBreakdownItem[],
+  startLine?: number,
+  endLine?: number
+): BlockASTNode {
+  let entExpr = 'entity';
+  let xExpr = 'x';
+  let yExpr = 'y';
+  let zExpr = 'z';
+
+  const entMatch = stmt.match(/(?:Entity|Player|LivingEntity)\s+[_a-zA-Z0-9]+\s*=\s*([^;]+);/);
+  if (entMatch) {
+    entExpr = entMatch[1].trim();
+  }
+
+  const xMatch = stmt.match(/double\s+[_a-zA-Z0-9]*x[a-zA-Z0-9]*\s*=\s*([^;]+);/i);
+  if (xMatch) {
+    xExpr = xMatch[1].trim();
+  }
+
+  const yMatch = stmt.match(/double\s+[_a-zA-Z0-9]*y[a-zA-Z0-9]*\s*=\s*([^;]+);/i);
+  if (yMatch) {
+    yExpr = yMatch[1].trim();
+  }
+
+  const zMatch = stmt.match(/double\s+[_a-zA-Z0-9]*z[a-zA-Z0-9]*\s*=\s*([^;]+);/i);
+  if (zMatch) {
+    zExpr = zMatch[1].trim();
+  }
+
+  if (!xMatch || !yMatch || !zMatch) {
+    const tpArgsMatch = stmt.match(/(?:teleportTo|teleport|setPos)\s*\(\s*([^,]+),\s*([^,]+),\s*([^)]+)\)/);
+    if (tpArgsMatch) {
+      if (!xMatch) xExpr = tpArgsMatch[1].trim();
+      if (!yMatch) yExpr = tpArgsMatch[2].trim();
+      if (!zMatch) zExpr = tpArgsMatch[3].trim();
+    }
+  }
+
+  breakdown.push({
+    javaLine: stmt,
+    lineNumber: startLine,
+    blockId: `move_ent_${idSeq}`,
+    mcreatorBlock: 'move_entity',
+    explanation: 'Set location of entity',
+  });
+
+  const entAST: BlockASTNode = (entExpr === 'entity' || entExpr === '_ent')
+    ? { id: `ent_dep_${idSeq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
+    : (entExpr === 'entityiterator' ? { id: `ent_iter_${idSeq}`, type: 'entity_iterator', category: 'entity', title: 'Entity iterator' } : parseExpressionToAST(entExpr, idSeq * 10 + 1));
+
+  return {
+    id: `move_ent_${idSeq}`,
+    type: 'move_entity',
+    category: 'entity',
+    title: 'Set location of entity',
+    values: [
+      { name: 'entity', block: entAST },
+      { name: 'x', block: parseExpressionToAST(xExpr, idSeq * 10 + 2) },
+      { name: 'y', block: parseExpressionToAST(yExpr, idSeq * 10 + 3) },
+      { name: 'z', block: parseExpressionToAST(zExpr, idSeq * 10 + 4) },
+    ],
+    sourceLine: startLine,
+    sourceEndLine: endLine,
+  };
+}
+
+function parseEntityDataSetStatement(stmt: string, idSeq: number, breakdown: TranslationBreakdownItem[], startLine?: number, endLine?: number): BlockASTNode {
+  const setMatch = stmt.match(/getEntityData\(\)\.set\(\s*([A-Za-z0-9_]+)\.DATA_([A-Za-z0-9_]+)\s*,\s*([^)]+)\s*\)/);
+  const rawEntityClass = setMatch ? setMatch[1] : 'CustomEntity';
+  const paramName = setMatch ? setMatch[2] : 'param';
+  const valExpr = setMatch ? setMatch[3].trim() : '0';
+
+  const cleanEntityName = rawEntityClass.replace(/Entity$/, '');
+  const isBool = valExpr === 'true' || valExpr === 'false';
+  const isString = valExpr.startsWith('"') || valExpr.startsWith("'");
+  const blockType = isBool ? 'entity_data_logic_set' : isString ? 'entity_data_string_set' : 'entity_data_integer_set';
+
+  breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `ent_data_set_${idSeq}`, mcreatorBlock: blockType, explanation: `Set ${cleanEntityName} data parameter '${paramName}' to ${valExpr}` });
+
+  return {
+    id: `ent_data_set_${idSeq}`,
+    type: blockType,
+    category: 'entity',
+    title: `For custom entity of type ${cleanEntityName} set data parameter ${paramName} value`,
+    fields: {
+      customEntity: `CUSTOM:${cleanEntityName}`,
+      accessor: paramName,
+    },
+    values: [
+      { name: 'entity', block: { id: `ent_${idSeq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' } },
+      { name: 'value', block: parseExpressionToAST(valExpr, idSeq * 10 + 1) },
+    ],
+    sourceLine: startLine,
+    sourceEndLine: endLine,
+  };
+}
+
+function parseEntityAddPotionStatement(stmt: string, idSeq: number, breakdown: TranslationBreakdownItem[], startLine?: number, endLine?: number): BlockASTNode {
+  const potMatch = stmt.match(/MobEffectInstance\s*\(\s*MobEffects\.([A-Za-z0-9_]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*(?:,\s*([^,]+)\s*,\s*([^)]+)\s*)?\)/);
+  const potName = potMatch ? potMatch[1] : 'REGENERATION';
+  const durExpr = potMatch ? potMatch[2].trim() : '60';
+  const ampExpr = potMatch ? potMatch[3].trim() : '0';
+  const ambExpr = potMatch && potMatch[4] ? potMatch[4].trim() : 'true';
+  const partExpr = potMatch && potMatch[5] ? potMatch[5].trim() : 'false';
+
+  const formattedPot = potName.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+
+  breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `potion_${idSeq}`, mcreatorBlock: 'entity_add_potion_advanced', explanation: `Add potion ${formattedPot} effect to entity` });
+
+  return {
+    id: `potion_${idSeq}`,
+    type: 'entity_add_potion_advanced',
+    category: 'action',
+    title: 'Add potion',
+    fields: { potion: formattedPot },
+    values: [
+      { name: 'potion', block: { id: `pot_name_${idSeq}`, type: 'text', category: 'text', title: formattedPot, fields: { TEXT: formattedPot } } },
+      { name: 'level', block: parseExpressionToAST(ampExpr, idSeq * 10 + 1) },
+      { name: 'duration', block: parseExpressionToAST(durExpr, idSeq * 10 + 2) },
+      { name: 'ambient', block: parseExpressionToAST(ambExpr, idSeq * 10 + 3) },
+      { name: 'particles', block: parseExpressionToAST(partExpr, idSeq * 10 + 4) },
+      { name: 'entity', block: { id: `ent_${idSeq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' } },
+    ],
+    sourceLine: startLine,
+    sourceEndLine: endLine,
+  };
+}
+
+function parseEntitySetAttributeStatement(stmt: string, idSeq: number, breakdown: TranslationBreakdownItem[], startLine?: number, endLine?: number): BlockASTNode {
+  const attrMatch = stmt.match(/getAttribute\(\s*Attributes\.([A-Za-z0-9_]+)\s*\)\s*\.setBaseValue\(\s*([^)]+)\s*\)/);
+  const rawAttr = attrMatch ? attrMatch[1] : 'WATER_MOVEMENT_EFFICIENCY';
+  const valExpr = attrMatch ? attrMatch[2].trim() : '1';
+
+  const formattedAttr = rawAttr === 'GRAVITY' ? 'Entity gravity' : rawAttr.split('_').map((w, idx) => idx === 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase()).join(' ');
+
+  breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `attr_${idSeq}`, mcreatorBlock: 'entity_set_attribute', explanation: `Set attribute ${formattedAttr} base value to ${valExpr}` });
+
+  return {
+    id: `attr_${idSeq}`,
+    type: 'entity_set_attribute',
+    category: 'entity',
+    title: 'Set the base value of attribute',
+    fields: { attribute: formattedAttr },
+    values: [
+      { name: 'value', block: parseExpressionToAST(valExpr, idSeq * 10 + 1) },
+      { name: 'entity', block: { id: `ent_${idSeq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' } },
+    ],
+    sourceLine: startLine,
+    sourceEndLine: endLine,
+  };
+}
+
+function parseSpawnEntityStatement(
+  stmt: string,
+  idSeq: number,
+  breakdown: TranslationBreakdownItem[],
+  startLine?: number,
+  endLine?: number
+): BlockASTNode {
+  const entMatch = stmt.match(/([A-Za-z0-9_]+ModEntities|[A-Za-z0-9_]+Entities|EntityType)\.([A-Za-z0-9_]+)/);
+  const rawEnt = entMatch ? entMatch[2] : 'CUSTOM_ENTITY';
+  const cleanEntityName = rawEnt
+    .toLowerCase()
+    .split('_')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join('');
+
+  let xExpr = 'x', yExpr = 'y', zExpr = 'z';
+  const posMatch = stmt.match(/BlockPos\.containing\(\s*([^,]+),\s*([^,]+),\s*([^)]+)\s*\)/) || stmt.match(/\.spawn\(\s*[^,]+,\s*([^,]+),\s*([^,]+),\s*([^,]+),/);
+  if (posMatch) {
+    xExpr = posMatch[1].trim();
+    yExpr = posMatch[2].trim();
+    zExpr = posMatch[3].trim();
+  }
+
+  let yawExpr = '0', pitchExpr = '0';
+  const yawMatch = stmt.match(/\.setYRot\(([^)]+)\)/);
+  if (yawMatch) yawExpr = yawMatch[1].trim();
+  const pitchMatch = stmt.match(/\.setXRot\(([^)]+)\)/);
+  if (pitchMatch) pitchExpr = pitchMatch[1].trim();
+
+  let vxExpr = '0', vyExpr = '0', vzExpr = '0';
+  const velMatch = stmt.match(/\.setDeltaMovement\(\s*([^,]+),\s*([^,]+),\s*([^)]+)\s*\)/);
+  if (velMatch) {
+    vxExpr = velMatch[1].trim();
+    vyExpr = velMatch[2].trim();
+    vzExpr = velMatch[3].trim();
+  }
+
+  breakdown.push({
+    javaLine: stmt.substring(0, 80) + '...',
+    lineNumber: startLine,
+    blockId: `spawn_ent_${idSeq}`,
+    mcreatorBlock: 'spawn_entity_with_rotation_velocity',
+    explanation: `Spawn entity ${cleanEntityName} at (${xExpr}, ${yExpr}, ${zExpr})`,
+  });
+
+  return {
+    id: `spawn_ent_${idSeq}`,
+    type: 'spawn_entity_with_rotation_velocity',
+    category: 'action',
+    title: 'Spawn entity',
+    fields: {
+      entity: `CUSTOM:${cleanEntityName}`,
+    },
+    values: [
+      { name: 'x', block: parseExpressionToAST(xExpr, idSeq * 10 + 1) },
+      { name: 'y', block: parseExpressionToAST(yExpr, idSeq * 10 + 2) },
+      { name: 'z', block: parseExpressionToAST(zExpr, idSeq * 10 + 3) },
+      { name: 'yaw', block: parseExpressionToAST(yawExpr, idSeq * 10 + 4) },
+      { name: 'pitch', block: parseExpressionToAST(pitchExpr, idSeq * 10 + 5) },
+      { name: 'vx', block: parseExpressionToAST(vxExpr, idSeq * 10 + 6) },
+      { name: 'vy', block: parseExpressionToAST(vyExpr, idSeq * 10 + 7) },
+      { name: 'vz', block: parseExpressionToAST(vzExpr, idSeq * 10 + 8) },
+    ],
+    sourceLine: startLine,
+    sourceEndLine: endLine,
+  };
+}
+
+function parseSpawnGemStatement(
+  stmt: string,
+  idSeq: number,
+  breakdown: TranslationBreakdownItem[],
+  startLine?: number,
+  endLine?: number
+): BlockASTNode {
+  let itemNode: BlockASTNode = {
+    id: `item_${idSeq}`,
+    type: 'mcitem_all',
+    category: 'item',
+    title: 'Dirt',
+    fields: { value: 'Blocks.DIRT' },
+  };
+
+  const itemIdx = stmt.indexOf('new ItemStack(');
+  if (itemIdx !== -1) {
+    const after = stmt.substring(itemIdx + 'new ItemStack('.length);
+    let depth = 1;
+    let rawItem = '';
+    for (let i = 0; i < after.length; i++) {
+      if (after[i] === '(') depth++;
+      else if (after[i] === ')') {
+        depth--;
+        if (depth === 0) {
+          rawItem = after.substring(0, i).trim();
+          break;
+        }
+      }
+    }
+    if (rawItem) {
+      const title = formatItemDisplayName(rawItem);
+      const value = formatItemFieldValue(rawItem);
+      itemNode = {
+        id: `item_${idSeq}`,
+        type: 'mcitem_all',
+        category: 'item',
+        title,
+        fields: { value },
+      };
+    }
+  }
+
+  let xExpr = 'x', yExpr = 'y', zExpr = 'z';
+  const posMatch = stmt.match(/new\s+ItemEntity\s*\(\s*[^,]+,\s*([^,]+),\s*([^,]+),\s*([^,]+),/);
+  if (posMatch) {
+    xExpr = posMatch[1].trim();
+    yExpr = posMatch[2].trim();
+    zExpr = posMatch[3].trim();
+  }
+
+  let delayExpr = '10';
+  const delayMatch = stmt.match(/setPickUpDelay\s*\(\s*([^)]+)\s*\)/);
+  if (delayMatch) {
+    delayExpr = delayMatch[1].trim();
+  }
+
+  const isDespawn = !stmt.includes('setUnlimitedLifetime()');
+
+  breakdown.push({
+    javaLine: stmt.substring(0, 80) + '...',
+    lineNumber: startLine,
+    blockId: `spawn_gem_${idSeq}`,
+    mcreatorBlock: 'spawn_gem',
+    explanation: `Spawn dropped item at (${xExpr}, ${yExpr}, ${zExpr}) with delay ${delayExpr}`,
+  });
+
+  return {
+    id: `spawn_gem_${idSeq}`,
+    type: 'spawn_gem',
+    category: 'action',
+    title: 'Spawn dropped item',
+    fields: {
+      despawn: isDespawn ? 'TRUE' : 'FALSE',
+    },
+    values: [
+      { name: 'block', block: itemNode },
+      { name: 'x', block: parseExpressionToAST(xExpr, idSeq * 10 + 1) },
+      { name: 'y', block: parseExpressionToAST(yExpr, idSeq * 10 + 2) },
+      { name: 'z', block: parseExpressionToAST(zExpr, idSeq * 10 + 3) },
+      { name: 'pickUpDelay', block: parseExpressionToAST(delayExpr, idSeq * 10 + 4) },
+    ],
+    sourceLine: startLine,
+    sourceEndLine: endLine,
+  };
+}
+
 function parseJavaStatementInternal(
   stmt: string,
   idSeq: number,
@@ -942,6 +1395,127 @@ function parseJavaStatementInternal(
   startLine?: number,
   endLine?: number
 ): BlockASTNode | null {
+  const trimmedStmt = stmt.trim();
+
+  // Filter out orphan closing syntax noise: );  });  }  };
+  if (!trimmedStmt || /^[\s\}\);]+$/.test(trimmedStmt)) {
+    return null;
+  }
+
+  // ServerLevel guard unwrapper or direct spawn statement
+  const isServerLevelOnlyWrapper = (
+    trimmedStmt.startsWith('if (world instanceof ServerLevel') ||
+    trimmedStmt.startsWith('if (_level != null)') ||
+    trimmedStmt.startsWith('if (level instanceof ServerLevel')
+  );
+
+  const isDirectSpawnStmt = (
+    trimmedStmt.startsWith('ItemEntity') ||
+    trimmedStmt.startsWith('Entity entityToSpawn') ||
+    trimmedStmt.startsWith('_level.addFreshEntity') ||
+    trimmedStmt.startsWith('world.addFreshEntity')
+  );
+
+  if (isServerLevelOnlyWrapper || isDirectSpawnStmt) {
+    if (trimmedStmt.includes('ItemEntity') && trimmedStmt.includes('new ItemEntity(')) {
+      return parseSpawnGemStatement(trimmedStmt, idSeq, breakdown, startLine, endLine);
+    }
+    if (trimmedStmt.includes('.spawn(') || trimmedStmt.includes('MobSpawnType') || trimmedStmt.includes('EntitySpawnReason')) {
+      return parseSpawnEntityStatement(trimmedStmt, idSeq, breakdown, startLine, endLine);
+    }
+  }
+
+  // 0.01 ENTITY DATA PARAMETER SETTER GUARD: getEntityData().set(...)
+  if (trimmedStmt.includes('.getEntityData().set(')) {
+    return parseEntityDataSetStatement(trimmedStmt, idSeq, breakdown, startLine, endLine);
+  }
+
+  // 0.02 ENTITY ADD POTION GUARD: .addEffect(new MobEffectInstance(...))
+  if (trimmedStmt.includes('.addEffect(') || trimmedStmt.includes('MobEffectInstance')) {
+    return parseEntityAddPotionStatement(trimmedStmt, idSeq, breakdown, startLine, endLine);
+  }
+
+  // 0.03 ENTITY ATTRIBUTE SETTER GUARD: .getAttribute(...).setBaseValue(...)
+  if (trimmedStmt.includes('.getAttribute(') && trimmedStmt.includes('.setBaseValue(')) {
+    return parseEntitySetAttributeStatement(trimmedStmt, idSeq, breakdown, startLine, endLine);
+  }
+
+  // 0.0 SCOPED BLOCK HANDLING: { ... }
+  if (trimmedStmt.startsWith('{') && trimmedStmt.endsWith('}')) {
+    // Check if scoped world_entity_inrange_foreach loop:
+    // e.g. { final Vec3 _center = new Vec3(x, y, z); for (Entity entityiterator : world.getEntitiesOfClass(...) ... ) { ... } }
+    if (trimmedStmt.includes('world.getEntitiesOfClass') || trimmedStmt.includes('new AABB(_center, _center).inflate')) {
+      return parseWorldEntityInRangeForeach(trimmedStmt, idSeq, variables, breakdown, elementType, startLine, endLine);
+    }
+
+    // Check if scoped move_entity block:
+    if (trimmedStmt.includes('.teleportTo(') || trimmedStmt.includes('.teleport(') || trimmedStmt.includes('.setPos(')) {
+      return parseMoveEntityStatement(trimmedStmt, idSeq, variables, breakdown, startLine, endLine);
+    }
+
+    // Check if scoped Entity NBT set statement:
+    // e.g. { Entity _ent = entityiterator; _ent.getPersistentData().putDouble("isEnraged", 1); }
+    const scopedNbtMatch = trimmedStmt.match(/\{\s*(?:Entity\s+)?([_a-zA-Z0-9]+)\s*=\s*([^;]+);\s*\1\.getPersistentData\(\)\.(putDouble|putInt|putFloat|putBoolean|putString)\(([^,]+),\s*([^)]+)\);?\s*\}/);
+    if (scopedNbtMatch) {
+      const rawTarget = scopedNbtMatch[2].trim();
+      const method = scopedNbtMatch[3];
+      const keyExpr = scopedNbtMatch[4].trim();
+      const valExpr = scopedNbtMatch[5].trim();
+      return parseEntityNbtSetStatement(rawTarget, method, keyExpr, valExpr, idSeq, breakdown, startLine, endLine);
+    }
+
+    // Generic scoped block: unwrap and chain statements
+    const innerBody = extractBlockBody(trimmedStmt);
+    if (innerBody) {
+      const innerStmts = splitStatementsWithLocations(innerBody, startLine);
+      const innerNodes = innerStmts
+        .map((s, idx) => parseJavaStatement(s.text, idSeq * 1000 + idx, variables, breakdown, elementType, s.startLine, s.endLine))
+        .filter((n): n is BlockASTNode => n !== null);
+      if (innerNodes.length > 0) {
+        return chainNodes(innerNodes);
+      }
+    }
+  }
+
+  // 0.05 DELAY / WAIT TICKS: queueServerWork / wait_ticks
+  if (stmt.includes('queueServerWork') || stmt.includes('wait(') || stmt.includes('wait_ticks')) {
+    const ticksMatch = stmt.match(/(?:queueServerWork|wait)\s*\(\s*([0-9]+)/);
+    const ticks = ticksMatch ? ticksMatch[1] : '20';
+    const innerBody = extractBlockBody(stmt);
+    const innerStmts = splitIntoStatements(innerBody);
+    const innerNodes = innerStmts
+      .map((s, idx) => parseJavaStatement(s, idSeq * 100 + idx, variables, breakdown, elementType))
+      .filter((n): n is BlockASTNode => n !== null);
+
+    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `wait_${idSeq}`, mcreatorBlock: 'wait_ticks', explanation: `Wait ${ticks} ticks before execution` });
+    return {
+      id: `wait_${idSeq}`,
+      type: 'wait_ticks',
+      category: 'event',
+      title: 'Run task after ticks on server-side',
+      values: [{ name: 'ticks', block: { id: `ticks_${idSeq}`, type: 'math_number', category: 'math', title: ticks, fields: { NUM: ticks } } }],
+      statements: [{ name: 'task', block: innerNodes.length > 0 ? chainNodes(innerNodes) : undefined }],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
+
+  // Direct move_entity statement without outer braces:
+  if (trimmedStmt.includes('.teleportTo(') || trimmedStmt.includes('.teleport(') || trimmedStmt.includes('.setPos(')) {
+    return parseMoveEntityStatement(trimmedStmt, idSeq, variables, breakdown, startLine, endLine);
+  }
+
+  // Direct scoped Entity NBT set without outer braces:
+  // e.g. Entity _ent = entityiterator; _ent.getPersistentData().putDouble("isEnraged", 1);
+  const directScopedNbtMatch = trimmedStmt.match(/^(?:Entity\s+)?([_a-zA-Z0-9]+)\s*=\s*([^;]+);\s*\1\.getPersistentData\(\)\.(putDouble|putInt|putFloat|putBoolean|putString)\(([^,]+),\s*([^)]+)\);?$/);
+  if (directScopedNbtMatch) {
+    const rawTarget = directScopedNbtMatch[2].trim();
+    const method = directScopedNbtMatch[3];
+    const keyExpr = directScopedNbtMatch[4].trim();
+    const valExpr = directScopedNbtMatch[5].trim();
+    return parseEntityNbtSetStatement(rawTarget, method, keyExpr, valExpr, idSeq, breakdown, startLine, endLine);
+  }
+
   // 0.1 INVENTORY FOREACH: For each slot of inventory of entity or block
   if (isInventoryForeach(stmt)) {
     return parseInventoryForeachStatement(stmt, idSeq, variables, breakdown, elementType);
@@ -1004,26 +1578,7 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 7. DELAY / WAIT TICKS
-  if (stmt.includes('queueServerWork') || stmt.includes('wait(') || stmt.includes('wait_ticks')) {
-    const ticksMatch = stmt.match(/(?:queueServerWork|wait)\s*\(\s*([0-9]+)/);
-    const ticks = ticksMatch ? ticksMatch[1] : '20';
-    const innerBody = extractBlockBody(stmt);
-    const innerStmts = splitIntoStatements(innerBody);
-    const innerNodes = innerStmts
-      .map((s, idx) => parseJavaStatement(s, idSeq * 100 + idx, variables, breakdown, elementType))
-      .filter((n): n is BlockASTNode => n !== null);
 
-    breakdown.push({ javaLine: stmt, mcreatorBlock: 'wait_ticks', explanation: `Wait ${ticks} ticks before execution` });
-    return {
-      id: `wait_${idSeq}`,
-      type: 'wait_ticks',
-      category: 'control',
-      title: 'Wait ticks',
-      values: [{ name: 'ticks', block: { id: `ticks_${idSeq}`, type: 'math_number', category: 'math', title: ticks, fields: { NUM: ticks } } }],
-      statements: [{ name: 'do', block: innerNodes.length > 0 ? chainNodes(innerNodes) : undefined }],
-    };
-  }
 
   // 8. LOCAL VARIABLE DECLARATION: Type var = expr;
   const declMatch = stmt.match(/^(?:final\s+)?(double|float|int|long|boolean|String|ItemStack|Entity|Player|Vec3|BlockPos|BlockState)\s+([a-zA-Z0-9_]+)\s*=\s*([\s\S]+?);?$/);
@@ -2264,6 +2819,30 @@ function parseIfStatement(
 ): BlockASTNode {
   const { branches, elseBody } = parseIfBranches(stmt);
 
+  // Check if this specific leaf if statement is custom unmapped NeoForge event handling / target setting:
+  if (
+    branches.length === 1 &&
+    elseBody === null &&
+    (branches[0].cond.includes('LivingDeathEvent') || branches[0].cond.includes('Event _') || branches[0].cond.includes('getSource().getEntity()'))
+  ) {
+    breakdown.push({
+      javaLine: stmt.trim().split('\n')[0],
+      lineNumber: startLine,
+      blockId: `snip_${idSeq}`,
+      mcreatorBlock: 'custom_code_snippet',
+      explanation: 'Custom NeoForge mob targeting logic preserved as verbatim code snippet',
+    });
+    return {
+      id: `snip_${idSeq}`,
+      type: 'custom_code_snippet',
+      category: 'code',
+      title: 'Custom code snippet',
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+      fields: { CODE: stmt.trim() },
+    };
+  }
+
   const ifValues: { name: string; block?: BlockASTNode }[] = [];
   const ifStatements: { name: string; block?: BlockASTNode }[] = [];
 
@@ -2343,6 +2922,10 @@ function parseForLoopStatement(
   startLine?: number,
   endLine?: number
 ): BlockASTNode {
+  if (stmt.includes('world.getEntitiesOfClass') || stmt.includes('new AABB(_center, _center).inflate')) {
+    return parseWorldEntityInRangeForeach(stmt, idSeq, variables, breakdown, elementType, startLine, endLine);
+  }
+
   const headerMatch = stmt.match(/^for\s*\(([\s\S]+?)\)\s*\{/);
   const header = headerMatch ? headerMatch[1].trim() : '';
   const body = extractBlockBody(stmt);
@@ -2705,10 +3288,151 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
     }
   }
 
+  // Logical negation: ! (expr) -> logic_negate (not)
+  if (expr.startsWith('!')) {
+    const unneg = expr.substring(1).trim();
+    const innerAST = parseExpressionToAST(unneg, seq * 10 + 1);
+    return {
+      id: `neg_${seq}`,
+      type: 'logic_negate',
+      category: 'logic',
+      title: 'not',
+      values: [{ name: 'BOOL', block: innerAST }],
+    };
+  }
+
+  // Infinity constant mapping for potion duration sockets etc.
+  if (expr.includes('Double.POSITIVE_INFINITY') || expr.includes('Double.MAX_VALUE')) {
+    return {
+      id: `num_inf_${seq}`,
+      type: 'math_number',
+      category: 'math',
+      title: '∞',
+      fields: { NUM: '∞' },
+    };
+  }
+
+  // Math.random() -> Random [0,1)
+  if (expr === 'Math.random()' || expr === 'java.lang.Math.random()') {
+    return {
+      id: `rnd_${seq}`,
+      type: 'math_dual_ops',
+      category: 'math',
+      title: 'Random [0,1)',
+      fields: { OP: 'RANDOM' },
+    };
+  }
+
+  // 0.05 ENTITY CREATIVE MODE CHECK: entity_iscreative
+  if (expr.includes('instabuild') || (expr.includes('instanceof Player') && expr.includes('getAbilities()'))) {
+    const isIterator = expr.includes('entityiterator') || expr.includes('_ent');
+    return {
+      id: `is_creative_${seq}`,
+      type: 'entity_iscreative',
+      category: 'entity',
+      title: 'Has creative mode ability enabled',
+      values: [
+        {
+          name: 'entity',
+          block: isIterator
+            ? { id: `iter_${seq}`, type: 'entity_iterator', category: 'entity', title: 'Entity iterator' }
+            : { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' },
+        },
+      ],
+    };
+  }
+
+  // Check if expression is complex custom ServerLevel or internal engine code that has no MCreator native block:
+  if (expr.includes('instanceof net.minecraft.server.level.ServerLevel') || expr.includes('ServerLevel _slv') || expr.includes('_slv.getServer()') || expr.includes('.getTickCount()')) {
+    return {
+      id: `snip_expr_${seq}`,
+      type: 'custom_code_snippet',
+      category: 'code',
+      title: `Custom code snippet: ${rawExpr.trim()}`,
+      fields: { CODE: rawExpr.trim() },
+      isSnippetValue: true,
+    };
+  }
+
   // Cast unwrapping: (float) expr, (int) expr, (double) expr
   const castMatch = expr.match(/^\((?:float|double|int|long)\)\s*([\s\S]+)$/);
   if (castMatch) {
-    return parseExpressionToAST(castMatch[1].trim(), seq);
+    const uncast = castMatch[1].trim();
+    if (uncast.includes('instanceof net.minecraft.server.level.ServerLevel') || uncast.includes('ServerLevel _slv') || uncast.includes('_slv.getServer()')) {
+      return {
+        id: `snip_expr_${seq}`,
+        type: 'custom_code_snippet',
+        category: 'code',
+        title: `Custom code snippet: ${rawExpr.trim()}`,
+        fields: { CODE: rawExpr.trim() },
+        isSnippetValue: true,
+      };
+    }
+    return parseExpressionToAST(uncast, seq);
+  }
+
+  // 0.1 ENTITY TAG CHECK: entity_is_tagged_in
+  // e.g. entity.getType().is(TagKey.create(Registries.ENTITY_TYPE, ResourceLocation.parse("the_backwoods:woodbound_entities")))
+  // e.g. entityiterator.getType().is(TagKey.create(Registries.ENTITY_TYPE, ...))
+  // e.g. entity.is(TagKey.create(Registries.ENTITY_TYPE, ...))
+  const entityTagMatch = expr.match(
+    /^([a-zA-Z0-9_]+)(?:\.getType\(\))?\.is\(\s*TagKey\.create\(\s*Registries\.ENTITY_TYPE\s*,\s*(?:ResourceLocation\.parse|ResourceLocation\.fromNamespaceAndPath|ResourceLocation\.tryParse)?\(?\s*([^)]+)\)?\s*\)\s*\)$/
+  );
+  if (entityTagMatch) {
+    const rawEntity = entityTagMatch[1].trim();
+    const tagArg = entityTagMatch[2].trim().replace(/^["']|["']$/g, '');
+    const entAST: BlockASTNode = (rawEntity === 'entityiterator' || rawEntity === '_ent')
+      ? { id: `iter_${seq}`, type: 'entity_iterator', category: 'entity', title: 'Entity iterator' }
+      : { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' };
+
+    return {
+      id: `ent_tag_${seq}`,
+      type: 'entity_is_tagged_in',
+      category: 'logic',
+      title: 'Is entity tagged in entity tags as',
+      values: [
+        { name: 'entity', block: entAST },
+        { name: 'tag', block: { id: `tag_txt_${seq}`, type: 'text', category: 'text', title: `"${tagArg}"`, fields: { TEXT: tagArg } } },
+      ],
+    };
+  }
+
+  // 0.2 WORLD DIFFICULTY CHECK: world_data_checkdifficulty
+  // e.g. world.getDifficulty() == Difficulty.HARD
+  const diffMatch = expr.match(/(?:world|level)\.getDifficulty\(\)\s*==\s*Difficulty\.([A-Z_]+)/) ||
+                    expr.match(/Difficulty\.([A-Z_]+)\s*==\s*(?:world|level)\.getDifficulty\(\)/) ||
+                    expr.match(/Difficulty\.([A-Z_]+)\.equals\(\s*(?:world|level)\.getDifficulty\(\)\s*\)/);
+  if (diffMatch) {
+    const diff = diffMatch[1];
+    return {
+      id: `diff_${seq}`,
+      type: 'world_data_checkdifficulty',
+      category: 'world',
+      title: `Is difficulty in the provided world ${diff}`,
+      fields: { difficulty: diff },
+    };
+  }
+
+  // 0.3 WORLD HEIGHT AT LOCATION: world_data_heightat
+  // e.g. world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, (int) x, (int) z)
+  // e.g. level.getHeight(Heightmap.Types.MOTION_BLOCKING, (int) x, (int) z)
+  const heightAtMatch = expr.match(/(?:world|level|_level)\.getHeight\(\s*Heightmap\.Types\.([A-Z_]+)\s*,\s*(?:\(int\)\s*)?([^,]+)\s*,\s*(?:\(int\)\s*)?([^)]+)\s*\)/);
+  if (heightAtMatch) {
+    const rawType = heightAtMatch[1];
+    const xArg = heightAtMatch[2].trim();
+    const zArg = heightAtMatch[3].trim();
+
+    return {
+      id: `height_at_${seq}`,
+      type: 'world_data_heightat',
+      category: 'world',
+      title: 'Get world height at location',
+      fields: { heightmapType: rawType },
+      values: [
+        { name: 'x', block: parseExpressionToAST(xArg, seq * 10 + 1) },
+        { name: 'z', block: parseExpressionToAST(zArg, seq * 10 + 2) },
+      ],
+    };
   }
 
   // 1. ENTITY DATA PARAMETER ACCESSORS (SYNCED DATA)
@@ -4073,7 +4797,7 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
     };
   }
 
-  if (expr === 'entityiterator' || expr === '_entity') {
+  if (expr === 'entityiterator' || expr === '_entity' || expr === '_ent') {
     return {
       id: `ent_iter_${seq}`,
       type: 'entity_iterator',
@@ -4703,6 +5427,13 @@ function generateBlocklyXmlFromAST(
       const hasElse = elseStatement !== undefined;
       if (elseIfCount > 0 || hasElse) {
         res += `${indent}  <mutation${elseIfCount > 0 ? ` elseif="${elseIfCount}"` : ''}${hasElse ? ` else="1"` : ''}></mutation>\n`;
+      }
+    } else if (node.type.startsWith('variables_set_') || node.type.startsWith('variables_get_')) {
+      res += `${indent}  <mutation xmlns="http://www.w3.org/1999/xhtml" is_player_var="false" has_entity="false"></mutation>\n`;
+      if (node.fields) {
+        for (const [key, val] of Object.entries(node.fields)) {
+          res += `${indent}  <field name="${key}">${escapeXml(val)}</field>\n`;
+        }
       }
     } else if (node.fields) {
       for (const [key, val] of Object.entries(node.fields)) {
