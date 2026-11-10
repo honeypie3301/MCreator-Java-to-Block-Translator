@@ -1,0 +1,6 @@
+{
+  "name": "MCreator Java to Block Translator",
+  "description": "Translates Java code for Minecraft NeoForge 1.21.1+ into MCreator 2026.1+ Blockly procedures, event listeners, and logic structures.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

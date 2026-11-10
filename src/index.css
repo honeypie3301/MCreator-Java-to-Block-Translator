@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "SF Pro Icons", "SF Mono", system-ui, sans-serif;
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: #121110;
+    color: #f5f2eb;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Custom SF-style scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #141210;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3b3530;
+  border-radius: 4px;
+  border: 2px solid #141210;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6e5d50;
+}
+
+/* Custom selection */
+::selection {
+  background-color: rgba(206, 176, 152, 0.3);
+  color: #faf6f0;
+}
+
+/* Custom styled selects */
+select {
+  font-family: inherit;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23ceb098' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.1em 1.1em;
+  padding-right: 1.75rem !important;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: #1a1715;
+  color: #faf6f0;
+  border-color: #3b342e;
+}
+
+select:focus {
+  border-color: #ceb098;
+  outline: none;
+}
+
+select option {
+  background-color: #1a1715 !important;
+  color: #faf6f0 !important;
+  padding: 8px 12px;
+}
+
+select option:checked,
+select option:hover {
+  background-color: #2e2823 !important;
+  color: #ceb098 !important;
+}

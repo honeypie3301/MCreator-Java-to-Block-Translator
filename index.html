@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function() {
+        try {
+          var _fetch = window.fetch ? window.fetch.bind(window) : null;
+          var desc = {
+            get: function() { return _fetch; },
+            set: function(fn) { _fetch = fn; },
+            configurable: true,
+            enumerable: true
+          };
+          try { Object.defineProperty(window, 'fetch', desc); } catch(e) {}
+          if (typeof Window !== 'undefined' && Window.prototype) {
+            try { Object.defineProperty(Window.prototype, 'fetch', desc); } catch(e) {}
+          }
+        } catch (e) {}
+
+        // Intercept and swallow any benign "Cannot set property fetch" window error from sandboxed iframe wrappers
+        if (typeof window !== 'undefined') {
+          window.addEventListener('error', function(event) {
+            if (event && event.message && event.message.indexOf('Cannot set property fetch') !== -1) {
+              if (event.preventDefault) event.preventDefault();
+              if (event.stopPropagation) event.stopPropagation();
+              return true;
+            }
+          }, true);
+        }
+      })();
+    </script>
+    <title>MCreator Java to Block Translator</title>
+    <meta name="description" content="Translates Java code for Minecraft NeoForge 1.21.1+ into MCreator 2026.1+ Blockly procedures, event listeners, and logic structures." />
+    <meta property="og:title" content="MCreator Java to Block Translator" />
+    <meta property="og:description" content="Translates Java code for Minecraft NeoForge 1.21.1+ into MCreator 2026.1+ Blockly procedures, event listeners, and logic structures." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
