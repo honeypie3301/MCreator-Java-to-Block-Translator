@@ -85,7 +85,7 @@ export function CustomDropdown<T extends string = string>({
           role="listbox"
           className={`absolute mt-1.5 ${
             align === 'right' ? 'right-0' : 'left-0'
-          } z-50 min-w-[180px] max-w-[340px] max-h-[320px] overflow-y-auto bg-[#1A1816] border border-[#423A33] rounded-lg shadow-2xl p-1 text-xs backdrop-blur-md`}
+          } z-50 min-w-[170px] max-w-[calc(100vw-2rem)] sm:max-w-[340px] max-h-[320px] overflow-y-auto bg-[#1A1816] border border-[#423A33] rounded-lg shadow-2xl p-1 text-xs backdrop-blur-md`}
         >
           {options.map((option) => {
             const isSelected = option.value === value;

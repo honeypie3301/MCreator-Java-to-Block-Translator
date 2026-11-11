@@ -82,12 +82,12 @@ export const BlocklyXmlViewer: React.FC<BlocklyXmlViewerProps> = ({
       </div>
 
       {/* Footer Info */}
-      <div className="bg-[#121110] px-3 py-1.5 border-t border-[#2E2925] text-[11px] text-[#A39B8E] flex items-center justify-between shrink-0">
-        <span className="flex items-center space-x-1">
-          <CheckCircle2 className="w-3.5 h-3.5 text-[#CEB098]" />
-          <span>Valid MCreator 2026.1 Blockly XML Structure</span>
+      <div className="bg-[#121110] px-3 py-1.5 border-t border-[#2E2925] text-[11px] text-[#A39B8E] flex items-center justify-between gap-2 flex-wrap min-w-0 shrink-0">
+        <span className="flex items-center space-x-1 min-w-0">
+          <CheckCircle2 className="w-3.5 h-3.5 text-[#CEB098] shrink-0" />
+          <span className="truncate">Valid MCreator 2026.1 Blockly XML Structure</span>
         </span>
-        <span>Ready for import into MCreator Workspace</span>
+        <span className="hidden sm:inline shrink-0">Ready for import into MCreator Workspace</span>
       </div>
     </div>
   );

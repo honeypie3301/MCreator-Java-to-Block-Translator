@@ -182,19 +182,19 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
       )}
 
       {/* Bottom Footer */}
-      <div className="bg-[#121110] p-2.5 border-t border-[#2E2925] flex items-center justify-between text-xs">
-        <div className="flex items-center space-x-2 text-[11px] text-[#A39B8E]">
+      <div className="bg-[#121110] p-2 sm:p-2.5 border-t border-[#2E2925] flex items-center justify-between gap-2 flex-wrap text-xs">
+        <div className="hidden sm:flex items-center space-x-2 text-[11px] text-[#A39B8E] shrink-0">
           <kbd className="px-1.5 py-0.5 bg-[#24201D] border border-[#3B342E] rounded text-[#FAF6F0] font-mono text-[10px]">
             Ctrl + Enter
           </kbd>
           <span>to convert into blocks</span>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end ml-auto">
           <button
             onClick={() => onChangeCode('')}
             disabled={!code || isTranslating}
-            className="px-2.5 py-1 text-xs text-[#A39B8E] hover:text-[#FAF6F0] hover:bg-[#24201D] border border-[#2E2925] rounded transition flex items-center space-x-1 disabled:opacity-40 cursor-pointer"
+            className="px-2.5 py-1.5 text-xs text-[#A39B8E] hover:text-[#FAF6F0] hover:bg-[#24201D] border border-[#2E2925] rounded transition flex items-center space-x-1 disabled:opacity-40 cursor-pointer shrink-0"
             title="Clear Code"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -204,16 +204,16 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
           <button
             onClick={onTranslate}
             disabled={!code.trim() || isTranslating}
-            className="px-4 py-1.5 text-xs font-semibold text-[#121110] bg-[#CEB098] hover:bg-[#E2D2C3] active:bg-[#B89980] rounded transition flex items-center space-x-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
+            className="px-3.5 py-1.5 text-xs font-semibold text-[#121110] bg-[#CEB098] hover:bg-[#E2D2C3] active:bg-[#B89980] rounded transition flex items-center space-x-1.5 shadow-sm disabled:opacity-50 cursor-pointer flex-1 sm:flex-none justify-center whitespace-nowrap"
           >
             {isTranslating ? (
               <>
-                <div className="w-3.5 h-3.5 border-2 border-[#121110]/30 border-t-[#121110] rounded-full animate-spin" />
+                <div className="w-3.5 h-3.5 border-2 border-[#121110]/30 border-t-[#121110] rounded-full animate-spin shrink-0" />
                 <span>Converting...</span>
               </>
             ) : (
               <>
-                <Play className="w-3.5 h-3.5 fill-current" />
+                <Play className="w-3.5 h-3.5 fill-current shrink-0" />
                 <span>Convert Code to Blocks</span>
               </>
             )}
@@ -223,4 +223,3 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
     </div>
   );
 };
-

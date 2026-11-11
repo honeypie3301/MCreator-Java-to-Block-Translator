@@ -525,58 +525,65 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
       isFullscreen ? 'fixed inset-3 z-50 shadow-2xl border-amber-500/50 bg-[#181a20]' : 'h-full'
     }`}>
       {/* MCreator Blockly Top Bar */}
-      <div className="bg-[#1e222b] px-3 py-2 border-b border-[#2d323e] flex items-center justify-between gap-3 flex-wrap">
+      <div className="bg-[#1e222b] px-2.5 sm:px-3 py-2 border-b border-[#2d323e] flex items-center justify-between gap-2 flex-wrap min-w-0">
         {/* Left: Procedure Name & Search */}
-        <div className="flex items-center space-x-3 flex-wrap">
-          <div className="flex items-center space-x-1.5 px-2.5 py-1 bg-[#282d39] rounded border border-[#3b4252] text-[#e5e9f0]">
-            <Sparkles className="w-3.5 h-3.5 text-[#CEB098]" />
-            <span className="font-bold text-xs text-[#FAF6F0]">
-              {procedureName || 'ParanoiaAudioLogic'}
+        <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
+          <div className="flex items-center space-x-1.5 px-2 py-1 bg-[#282d39] rounded border border-[#3b4252] text-[#e5e9f0] min-w-0 max-w-full shadow-xs">
+            <Sparkles className="w-3.5 h-3.5 text-[#CEB098] shrink-0" />
+            <span
+              className="font-bold text-xs text-[#FAF6F0] truncate max-w-[130px] sm:max-w-[220px] md:max-w-[340px]"
+              title={procedureName || "ParanoiaAudioLogic"}
+            >
+              {procedureName || "ParanoiaAudioLogic"}
             </span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#3b4252] text-[#CEB098] font-mono ml-1 border border-[#52463C]">
-              {eventTrigger || 'no_ext_trigger'}
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded bg-[#3b4252] text-[#CEB098] font-mono ml-1 border border-[#52463C] truncate max-w-[90px] sm:max-w-[150px] shrink-0 hidden xs:inline-block"
+              title={eventTrigger || "no_ext_trigger"}
+            >
+              {eventTrigger || "no_ext_trigger"}
             </span>
           </div>
 
           {/* Search Box */}
-          <div className="relative flex items-center">
+          <div className="relative flex items-center flex-1 min-w-[130px] max-w-xs">
             <Search className="w-3.5 h-3.5 absolute left-2.5 text-[#6c768a]" />
             <input
               type="text"
               placeholder="Search procedure blocks..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 pr-3 py-1 bg-[#14171d] border border-[#2e3440] rounded text-xs text-[#d8dee9] placeholder-[#5c6370] outline-none focus:border-[#434c5e] w-44"
+              className="pl-8 pr-3 py-1 bg-[#14171d] border border-[#2e3440] rounded text-xs text-[#d8dee9] placeholder-[#5c6370] outline-none focus:border-[#434c5e] w-full"
             />
           </div>
         </div>
 
         {/* Right: View Toggles & Zoom Controls */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-1.5 shrink-0 ml-auto">
           {/* View Mode Switcher */}
           <div className="flex items-center bg-[#14171d] p-0.5 rounded border border-[#2e3440] text-[11px]">
             <button
               onClick={() => setViewMode('blockly')}
-              className={`px-2 py-0.5 rounded font-medium transition cursor-pointer ${
+              className={`px-2 py-0.5 rounded font-medium transition cursor-pointer whitespace-nowrap ${
                 viewMode === 'blockly'
                   ? 'bg-[#3b4252] text-[#eceff4] shadow-sm'
                   : 'text-[#7e889b] hover:text-[#d8dee9]'
               }`}
             >
-              Blockly Canvas
+              <span className="hidden sm:inline">Blockly Canvas</span>
+              <span className="sm:hidden">Canvas</span>
             </button>
             <button
               onClick={() => setViewMode('tree')}
-              className={`px-2 py-0.5 rounded font-medium transition cursor-pointer ${
+              className={`px-2 py-0.5 rounded font-medium transition cursor-pointer whitespace-nowrap ${
                 viewMode === 'tree'
                   ? 'bg-[#3b4252] text-[#eceff4] shadow-sm'
                   : 'text-[#7e889b] hover:text-[#d8dee9]'
               }`}
             >
-              AST Inspector
+              <span className="hidden sm:inline">AST Inspector</span>
+              <span className="sm:hidden">AST</span>
             </button>
           </div>
-
           {/* Zoom Buttons & Fullscreen */}
           <div className="flex items-center bg-[#14171d] px-1.5 py-0.5 rounded border border-[#2e3440] text-[11px] text-[#7e889b]">
             <button

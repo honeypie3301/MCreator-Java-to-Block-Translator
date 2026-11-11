@@ -33,24 +33,36 @@ export const Header: React.FC<HeaderProps> = ({
   fileExtension,
 }) => {
   return (
-    <header className="border-b border-[#2A2622] bg-[#161412] px-3 py-2 flex flex-wrap items-center justify-between gap-2.5 sticky top-0 z-50 text-[#F5F2EB] text-xs min-w-0">
-      {/* Brand Title - Compact */}
-      <div className="flex items-center space-x-2 shrink-0">
-        <div className="p-1 rounded bg-[#2A241F] border border-[#52463C] text-[#E8D8C8] flex items-center justify-center shadow-inner shrink-0">
-          <Blocks className="w-4 h-4 text-[#CEB098]" />
+    <header className="border-b border-[#2A2622] bg-[#161412] px-2.5 sm:px-3 py-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sticky top-0 z-50 text-[#F5F2EB] text-xs min-w-0">
+      {/* Brand Title Row */}
+      <div className="flex items-center justify-between w-full sm:w-auto shrink-0">
+        <div className="flex items-center space-x-2">
+          <div className="p-1 rounded bg-[#2A241F] border border-[#52463C] text-[#E8D8C8] flex items-center justify-center shadow-inner shrink-0">
+            <Blocks className="w-4 h-4 text-[#CEB098]" />
+          </div>
+          <div className="flex items-center space-x-1.5">
+            <h1 className="text-xs font-bold tracking-tight text-[#FAF6F0] whitespace-nowrap">
+              MCreator Block Translator
+            </h1>
+            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#2A241F] text-[#CEB098] border border-[#52463C] shrink-0">
+              2026.1+
+            </span>
+          </div>
         </div>
-        <div className="flex items-center space-x-2 shrink-0">
-          <h1 className="text-xs font-bold tracking-tight text-[#FAF6F0]">
-            MCreator Block Translator
-          </h1>
-          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#2A241F] text-[#CEB098] border border-[#52463C]">
-            2026.1+
-          </span>
-        </div>
+
+        {/* Quick Reset on Mobile Title Bar */}
+        <button
+          onClick={onReset}
+          disabled={isTranslating}
+          className="sm:hidden p-1 rounded-md bg-[#1F1C19] hover:bg-[#2A2622] text-[#A39B8E] hover:text-[#FAF6F0] border border-[#3B342E] transition disabled:opacity-40 cursor-pointer shrink-0"
+          title="Clear Code Input"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+        </button>
       </div>
 
-      {/* Selectors & Actions - Compact */}
-      <div className="flex items-center flex-wrap gap-2 text-xs min-w-0 justify-end">
+      {/* Selectors & Actions */}
+      <div className="flex items-center flex-wrap gap-1.5 sm:gap-2 text-xs min-w-0 w-full sm:w-auto justify-start sm:justify-end">
         {/* Element Type Selector */}
         <CustomDropdown<MCreatorElementType>
           value={elementType}
@@ -81,7 +93,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Registered Block Database Library Button */}
         <button
           onClick={onOpenBlockLibrary}
-          className="px-2.5 py-1 text-xs font-medium rounded-md bg-[#24201D] hover:bg-[#2E2925] text-[#CEB098] border border-[#524438] transition flex items-center space-x-1.5 cursor-pointer shadow-xs"
+          className="px-2.5 py-1 text-xs font-medium rounded-md bg-[#24201D] hover:bg-[#2E2925] text-[#CEB098] border border-[#524438] transition flex items-center space-x-1.5 cursor-pointer shadow-xs shrink-0 whitespace-nowrap"
           title="Browse all 1,000+ registered MCreator procedure blocks"
         >
           <BookOpen className="w-3.5 h-3.5 text-[#CEB098]" />
@@ -93,7 +105,7 @@ export const Header: React.FC<HeaderProps> = ({
           <>
             <button
               onClick={onCopyXml}
-              className="px-2.5 py-1 text-xs font-medium rounded-md bg-[#24201D] hover:bg-[#2E2925] text-[#FAF6F0] border border-[#423A33] transition flex items-center space-x-1 cursor-pointer"
+              className="px-2.5 py-1 text-xs font-medium rounded-md bg-[#24201D] hover:bg-[#2E2925] text-[#FAF6F0] border border-[#423A33] transition flex items-center space-x-1 cursor-pointer shrink-0 whitespace-nowrap"
               title="Copy MCreator Blockly XML"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-[#CEB098]" /> : <Copy className="w-3.5 h-3.5" />}
@@ -102,7 +114,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             <button
               onClick={onExportFile}
-              className="px-2.5 py-1 text-xs font-semibold rounded-md bg-[#CEB098] hover:bg-[#E2D2C3] active:bg-[#B89980] text-[#1A1816] transition flex items-center space-x-1 shadow-xs cursor-pointer"
+              className="px-2.5 py-1 text-xs font-semibold rounded-md bg-[#CEB098] hover:bg-[#E2D2C3] active:bg-[#B89980] text-[#1A1816] transition flex items-center space-x-1 shadow-xs cursor-pointer shrink-0 whitespace-nowrap"
               title={`Download ${fileExtension} template for MCreator`}
             >
               <Download className="w-3.5 h-3.5 text-[#1A1816]" />
@@ -111,10 +123,11 @@ export const Header: React.FC<HeaderProps> = ({
           </>
         )}
 
+        {/* Desktop Reset Button */}
         <button
           onClick={onReset}
           disabled={isTranslating}
-          className="p-1 rounded-md bg-[#1F1C19] hover:bg-[#2A2622] text-[#A39B8E] hover:text-[#FAF6F0] border border-[#3B342E] transition disabled:opacity-40 cursor-pointer"
+          className="hidden sm:inline-flex p-1 rounded-md bg-[#1F1C19] hover:bg-[#2A2622] text-[#A39B8E] hover:text-[#FAF6F0] border border-[#3B342E] transition disabled:opacity-40 cursor-pointer shrink-0"
           title="Clear Code Input"
         >
           <RefreshCw className="w-3.5 h-3.5" />

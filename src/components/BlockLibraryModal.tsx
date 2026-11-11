@@ -393,29 +393,30 @@ export const BlockLibraryModal: React.FC<BlockLibraryModalProps> = ({ isOpen, on
                   {visibleItems.map(({ block, canonicalCategory, theme, subBreadcrumb }) => (
                     <div
                       key={block.id}
-                      className="bg-[#161412] border border-[#28231F] rounded-lg p-2.5 flex flex-col justify-between space-y-2 shadow-xs hover:border-[#524438] transition min-w-0"
+                      className="bg-[#161412] border border-[#28231F] rounded-lg p-2.5 flex flex-col justify-between space-y-2 shadow-xs hover:border-[#524438] transition min-w-0 overflow-hidden"
                     >
                       {/* Block Title Header */}
                       <div className="min-w-0">
-                        <div className="flex items-start justify-between gap-1.5 mb-1.5 min-w-0">
+                        <div className="flex items-center justify-between gap-1.5 mb-1.5 min-w-0 flex-wrap">
                           <span
-                            className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider shrink-0 flex items-center gap-1"
+                            className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider shrink-0 max-w-[62%] truncate flex items-center gap-1 shadow-xs"
                             style={{
                               backgroundColor: theme.bg,
                               color: theme.text,
                               border: `1px solid ${theme.border}`,
                             }}
+                            title={`${canonicalCategory}${subBreadcrumb ? ` ▸ ${subBreadcrumb}` : ""}`}
                           >
-                            <span>{canonicalCategory}</span>
+                            <span className="truncate">{canonicalCategory.replace(" procedures", "")}</span>
                             {subBreadcrumb && (
                               <>
-                                <span className="opacity-60 text-[9px]">▸</span>
-                                <span>{subBreadcrumb}</span>
+                                <span className="opacity-60 text-[9px] shrink-0">▸</span>
+                                <span className="shrink-0">{subBreadcrumb}</span>
                               </>
                             )}
                           </span>
                           <span
-                            className="font-mono text-[10px] text-[#CEB098] bg-[#221E1B] px-1.5 py-0.5 rounded border border-[#3A332C] truncate max-w-[150px] shrink-0"
+                            className="font-mono text-[10px] text-[#CEB098] bg-[#221E1B] px-1.5 py-0.5 rounded border border-[#3A332C] truncate max-w-[130px] sm:max-w-[150px] shrink min-w-0 shadow-xs"
                             title={block.mcreatorType || block.id}
                           >
                             {block.mcreatorType || block.id}

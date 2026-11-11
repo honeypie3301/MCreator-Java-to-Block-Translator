@@ -25,13 +25,16 @@ export const BreakdownTable: React.FC<BreakdownTableProps> = ({
 
   return (
     <div className="bg-[#181614] border border-[#2E2925] rounded-lg overflow-hidden font-mono text-xs">
-      <div className="bg-[#121110] px-3 py-2 border-b border-[#2E2925] font-semibold text-[#FAF6F0] flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <FileCode className="w-4 h-4 text-[#CEB098]" />
-          <span>Java Code to MCreator Block AST Mapping</span>
+      <div className="bg-[#121110] px-3 py-2 border-b border-[#2E2925] font-semibold text-[#FAF6F0] flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap min-w-0">
+        <div className="flex items-center space-x-2 min-w-0">
+          <FileCode className="w-4 h-4 text-[#CEB098] shrink-0" />
+          <span className="truncate">Java Code to MCreator Block AST Mapping</span>
         </div>
-        <span className="text-[11px] text-[#A39B8E]">
+        <span className="text-[11px] text-[#A39B8E] shrink-0 hidden sm:inline">
           Click any row to jump & highlight block in Visual Canvas
+        </span>
+        <span className="text-[10px] text-[#A39B8E] shrink-0 sm:hidden">
+          Tap row to jump to block
         </span>
       </div>
 

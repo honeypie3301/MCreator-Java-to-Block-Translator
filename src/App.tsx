@@ -185,7 +185,7 @@ export default function App() {
 
       {/* "Already Converted" Pop-up Alert Banner */}
       {showAlreadyConvertedToast && (
-        <div className="bg-[#1e2316] border-b border-emerald-600/50 px-3 py-1.5 flex items-center justify-between text-emerald-200 text-xs shadow-md transition-all animate-fadeIn">
+        <div className="bg-[#1e2316] border-b border-emerald-600/50 px-3 py-1.5 flex items-center justify-between gap-2 text-emerald-200 text-xs min-w-0 shadow-md transition-all animate-fadeIn">
           <div className="flex items-center space-x-2">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             <span className="font-medium text-[11px]">
@@ -203,7 +203,7 @@ export default function App() {
 
       {/* Feature (.ftpl) Single Window Warning Banner */}
       {elementType === 'feature' && (
-        <div className="bg-[#2a1d18] border-b border-amber-600/50 px-3 py-1.5 flex items-center justify-between text-amber-200 text-xs shadow-md transition-all animate-fadeIn">
+        <div className="bg-[#2a1d18] border-b border-amber-600/50 px-3 py-1.5 flex items-center justify-between gap-2 text-amber-200 text-xs min-w-0 flex-wrap sm:flex-nowrap shadow-md transition-all animate-fadeIn">
           <div className="flex items-center space-x-2">
             <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <span className="font-medium text-[11px]">
@@ -238,60 +238,66 @@ export default function App() {
 
         {/* Right Column: MCreator Block Translation Canvas */}
         <div className="lg:col-span-7 flex flex-col h-[560px] lg:h-full min-h-[420px] bg-[#181614] border border-[#2E2925] rounded-lg overflow-hidden shadow-sm">
-          {/* Navigation Tabs - Compact & Responsive */}
-          <div className="bg-[#121110] border-b border-[#2E2925] px-2.5 py-1.5 flex items-center justify-between flex-wrap gap-2 text-xs min-w-0">
-            <div className="flex items-center gap-1 overflow-x-auto min-w-0 flex-1 scrollbar-none py-0.5">
+          {/* Navigation Tabs - Responsive */}
+          <div className="bg-[#121110] border-b border-[#2E2925] px-2.5 py-1.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 text-xs min-w-0">
+            {/* Horizontal Scrollable Tabs */}
+            <div className="flex items-center gap-1 overflow-x-auto min-w-0 scrollbar-none py-0.5 w-full sm:w-auto">
               <button
                 onClick={() => setActiveTab('visual')}
-                className={`px-3 py-1.5 rounded-md font-medium transition flex items-center space-x-1.5 cursor-pointer ${
+                className={`px-2.5 sm:px-3 py-1.5 rounded-md font-medium transition flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer ${
                   activeTab === 'visual'
                     ? 'bg-[#28231F] text-[#CEB098] border border-[#524438]'
                     : 'text-[#A39B8E] hover:text-[#FAF6F0] hover:bg-[#1A1816]'
                 }`}
               >
-                <Layers className="w-3.5 h-3.5" />
-                <span>Visual Blocks</span>
+                <Layers className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Visual Blocks</span>
+                <span className="sm:hidden">Visual</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('xml')}
-                className={`px-3 py-1.5 rounded-md font-medium transition flex items-center space-x-1.5 cursor-pointer ${
+                className={`px-2.5 sm:px-3 py-1.5 rounded-md font-medium transition flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer ${
                   activeTab === 'xml'
                     ? 'bg-[#28231F] text-[#CEB098] border border-[#524438]'
                     : 'text-[#A39B8E] hover:text-[#FAF6F0] hover:bg-[#1A1816]'
                 }`}
               >
-                <FileCode className="w-3.5 h-3.5" />
-                <span>Blockly XML ({result?.fileExtension || '.ptpl'})</span>
+                <FileCode className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Blockly XML ({result?.fileExtension || '.ptpl'})</span>
+                <span className="sm:hidden">XML ({result?.fileExtension || '.ptpl'})</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('spec')}
-                className={`px-3 py-1.5 rounded-md font-medium transition flex items-center space-x-1.5 cursor-pointer ${
+                className={`px-2.5 sm:px-3 py-1.5 rounded-md font-medium transition flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer ${
                   activeTab === 'spec'
                     ? 'bg-[#28231F] text-[#CEB098] border border-[#524438]'
                     : 'text-[#A39B8E] hover:text-[#FAF6F0] hover:bg-[#1A1816]'
                 }`}
               >
-                <Cpu className="w-3.5 h-3.5" />
-                <span>Element Spec</span>
+                <Cpu className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Element Spec</span>
+                <span className="sm:hidden">Spec</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('breakdown')}
-                className={`px-3 py-1.5 rounded-md font-medium transition flex items-center space-x-1.5 cursor-pointer ${
+                className={`px-2.5 sm:px-3 py-1.5 rounded-md font-medium transition flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer ${
                   activeTab === 'breakdown'
                     ? 'bg-[#28231F] text-[#CEB098] border border-[#524438]'
                     : 'text-[#A39B8E] hover:text-[#FAF6F0] hover:bg-[#1A1816]'
                 }`}
               >
-                <ListCheck className="w-3.5 h-3.5" />
-                <span>Line AST Mapping</span>
+                <ListCheck className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Line AST Mapping</span>
+                <span className="sm:hidden">AST</span>
               </button>
             </div>
 
+            {/* Right: Method selector & Procedure Name Pill */}
             {result && (
-              <div className="flex items-center gap-2 shrink-0 min-w-0 ml-auto">
+              <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 min-w-0 w-full sm:w-auto pt-1 sm:pt-0 border-t sm:border-t-0 border-[#221E1B]">
                 {result.detectedMethods && result.detectedMethods.length > 1 && (
                   <CustomDropdown
                     value={result.activeMethodName || result.detectedMethods[0]?.signature}
@@ -316,7 +322,7 @@ export default function App() {
                   />
                 )}
                 <span
-                  className="text-[11px] font-mono text-[#CEB098] bg-[#24201D] px-2.5 py-0.5 rounded border border-[#3B342E] truncate max-w-[180px] sm:max-w-[260px] md:max-w-[340px] shrink min-w-0 shadow-xs"
+                  className="text-[11px] font-mono text-[#CEB098] bg-[#24201D] px-2.5 py-0.5 rounded border border-[#3B342E] truncate max-w-[200px] sm:max-w-[260px] md:max-w-[340px] shrink min-w-0 shadow-xs"
                   title={`${result.procedureName}${result.fileExtension}`}
                 >
                   {result.procedureName}{result.fileExtension}
@@ -324,7 +330,6 @@ export default function App() {
               </div>
             )}
           </div>
-
           {/* Tab View Body */}
           <div className="flex-1 p-3 bg-[#0F0E0D] overflow-auto min-h-0 flex flex-col">
             {isTranslating ? (
