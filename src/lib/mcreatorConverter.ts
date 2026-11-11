@@ -1576,11 +1576,49 @@ function parseMoveEntityStatement(
   }
 
   if (!xMatch || !yMatch || !zMatch) {
-    const tpArgsMatch = stmt.match(/(?:teleportTo|teleport|setPos)\s*\(\s*([^,]+),\s*([^,]+),\s*([^)]+)\)/);
-    if (tpArgsMatch) {
-      if (!xMatch) xExpr = tpArgsMatch[1].trim();
-      if (!yMatch) yExpr = tpArgsMatch[2].trim();
-      if (!zMatch) zExpr = tpArgsMatch[3].trim();
+    const callMatch = stmt.match(/(?:teleportTo|teleport|setPos)\s*\(/);
+    if (callMatch && callMatch.index !== undefined) {
+      const startIdx = callMatch.index + callMatch[0].length;
+      let depth = 1;
+      let endIdx = startIdx;
+      for (let i = startIdx; i < stmt.length; i++) {
+        if (stmt[i] === '(' || stmt[i] === '[' || stmt[i] === '{') depth++;
+        else if (stmt[i] === ')' || stmt[i] === ']' || stmt[i] === '}') {
+          depth--;
+          if (depth === 0) {
+            endIdx = i;
+            break;
+          }
+        }
+      }
+      const rawArgsStr = stmt.substring(startIdx, endIdx);
+      const args: string[] = [];
+      let cur = '';
+      let argDepth = 0;
+      for (let i = 0; i < rawArgsStr.length; i++) {
+        const c = rawArgsStr[i];
+        if (c === '(' || c === '[' || c === '{') argDepth++;
+        else if (c === ')' || c === ']' || c === '}') argDepth--;
+        else if (c === ',' && argDepth === 0) {
+          args.push(cur.trim());
+          cur = '';
+          continue;
+        }
+        cur += c;
+      }
+      if (cur.trim()) args.push(cur.trim());
+
+      // If called as teleportTo(level, x, y, z, yRot, xRot) -> 2nd, 3rd, 4th args
+      // If called as teleportTo(x, y, z) -> 1st, 2nd, 3rd args
+      if (args.length >= 6 || (args.length >= 4 && (args[0].includes('Level') || args[0].includes('level')))) {
+        if (!xMatch && args[1]) xExpr = args[1];
+        if (!yMatch && args[2]) yExpr = args[2];
+        if (!zMatch && args[3]) zExpr = args[3];
+      } else if (args.length >= 3) {
+        if (!xMatch && args[0]) xExpr = args[0];
+        if (!yMatch && args[1]) yExpr = args[1];
+        if (!zMatch && args[2]) zExpr = args[2];
+      }
     }
   }
 
@@ -1869,6 +1907,76 @@ function parseJavaStatementInternal(
     return null;
   }
 
+  // 0.05 DELAY / WAIT TICKS: queueServerWork / wait_ticks (only when statement directly calls queueServerWork or wait)
+  const isDirectWaitCall = !trimmedStmt.startsWith('if') && !trimmedStmt.startsWith('for') && !trimmedStmt.startsWith('{') && (
+    trimmedStmt.startsWith('queueServerWork(') ||
+    trimmedStmt.startsWith('wait(') ||
+    trimmedStmt.startsWith('wait_ticks(') ||
+    /^[a-zA-Z0-9_.]+\.queueServerWork\s*\(/.test(trimmedStmt)
+  );
+  if (isDirectWaitCall) {
+    const ticksMatch = trimmedStmt.match(/(?:queueServerWork|wait)\s*\(\s*([0-9]+)/);
+    const ticks = ticksMatch ? ticksMatch[1] : '20';
+    const innerBody = extractBlockBody(trimmedStmt);
+    const innerStmts = splitStatementsWithLocations(innerBody, startLine);
+    const innerNodes = innerStmts
+      .map((s, idx) => parseJavaStatement(s.text, idSeq * 100 + idx, variables, breakdown, elementType, s.startLine, s.endLine))
+      .filter((n): n is BlockASTNode => n !== null);
+
+    breakdown.push({ javaLine: trimmedStmt, lineNumber: startLine, blockId: `wait_${idSeq}`, mcreatorBlock: 'wait_ticks', explanation: `Wait ${ticks} ticks before execution` });
+    return {
+      id: `wait_${idSeq}`,
+      type: 'wait_ticks',
+      category: 'event',
+      title: 'Run task after ticks on server-side',
+      values: [{ name: 'ticks', block: { id: `ticks_${idSeq}`, type: 'math_number', category: 'math', title: ticks, fields: { NUM: ticks } } }],
+      statements: [{ name: 'task', block: innerNodes.length > 0 ? chainNodes(innerNodes) : undefined }],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
+
+  // MCreator ServerPlayer Dimension Teleport pattern:
+  // if (entity instanceof ServerPlayer _player && !_player.level().isClientSide()) {
+  //   ResourceKey<Level> destinationType = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse("the_backwoods:rotting"));
+  //   ...
+  // }
+  if (
+    (trimmedStmt.includes('destinationType') || trimmedStmt.includes('ClientboundLevelEventPacket') || trimmedStmt.includes('ClientboundGameEventPacket')) &&
+    (trimmedStmt.includes('Registries.DIMENSION') || trimmedStmt.includes('dimension() == destinationType') || trimmedStmt.includes('ServerLevel nextLevel'))
+  ) {
+    const dimMatch = trimmedStmt.match(/(?:ResourceLocation\.parse|new\s+ResourceLocation|Identifier\.fromNamespaceAndPath)\s*\(\s*["']([^"']+)["']\s*\)/);
+    let rawDim = dimMatch ? dimMatch[1] : 'CUSTOM:TheGrain';
+    const dimParts = rawDim.split(':');
+    const dimName = dimParts.length > 1 ? dimParts[1] : dimParts[0];
+    const formattedDim = dimName.charAt(0).toUpperCase() + dimName.slice(1);
+
+    const entMatch = trimmedStmt.match(/([_a-zA-Z0-9]+)\s+instanceof\s+ServerPlayer/);
+    const rawEnt = entMatch ? entMatch[1] : 'entity';
+    const targetAST: BlockASTNode = (rawEnt === 'entity' || rawEnt === '_player' || rawEnt === '_ent')
+      ? { id: `ent_dep_${idSeq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
+      : parseExpressionToAST(rawEnt, idSeq * 10 + 1);
+
+    breakdown.push({
+      javaLine: trimmedStmt.substring(0, 80) + '...',
+      lineNumber: startLine,
+      blockId: `switch_dim_${idSeq}`,
+      mcreatorBlock: 'entity_switch_dimension',
+      explanation: `Switch dimension of entity to ${formattedDim}`,
+    });
+
+    return {
+      id: `switch_dim_${idSeq}`,
+      type: 'entity_switch_dimension',
+      category: 'entity',
+      title: `Switch dimension of entity to ${formattedDim}`,
+      fields: { dimension: rawDim.includes(':') ? `CUSTOM:${formattedDim}` : formattedDim },
+      values: [{ name: 'entity', block: targetAST }],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
+
   // Filter out entity registerGoals boilerplate for ai_task
   if (elementType === 'ai_task') {
     if (
@@ -1993,6 +2101,7 @@ function parseJavaStatementInternal(
       };
     }
 
+
     // Generic scoped block: unwrap and chain statements
     const innerBody = extractBlockBody(trimmedStmt);
     if (innerBody) {
@@ -2004,29 +2113,6 @@ function parseJavaStatementInternal(
         return chainNodes(innerNodes);
       }
     }
-  }
-
-  // 0.05 DELAY / WAIT TICKS: queueServerWork / wait_ticks (only when statement directly starts with queueServerWork or wait)
-  if (!trimmedStmt.startsWith('if') && !trimmedStmt.startsWith('for') && !trimmedStmt.startsWith('{') && (trimmedStmt.includes('queueServerWork') || trimmedStmt.startsWith('wait(') || trimmedStmt.startsWith('wait_ticks('))) {
-    const ticksMatch = stmt.match(/(?:queueServerWork|wait)\s*\(\s*([0-9]+)/);
-    const ticks = ticksMatch ? ticksMatch[1] : '20';
-    const innerBody = extractBlockBody(stmt);
-    const innerStmts = splitIntoStatements(innerBody);
-    const innerNodes = innerStmts
-      .map((s, idx) => parseJavaStatement(s, idSeq * 100 + idx, variables, breakdown, elementType))
-      .filter((n): n is BlockASTNode => n !== null);
-
-    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `wait_${idSeq}`, mcreatorBlock: 'wait_ticks', explanation: `Wait ${ticks} ticks before execution` });
-    return {
-      id: `wait_${idSeq}`,
-      type: 'wait_ticks',
-      category: 'event',
-      title: 'Run task after ticks on server-side',
-      values: [{ name: 'ticks', block: { id: `ticks_${idSeq}`, type: 'math_number', category: 'math', title: ticks, fields: { NUM: ticks } } }],
-      statements: [{ name: 'task', block: innerNodes.length > 0 ? chainNodes(innerNodes) : undefined }],
-      sourceLine: startLine,
-      sourceEndLine: endLine,
-    };
   }
 
   // Direct move_entity statement without outer braces (only when not an if or for block):
@@ -4600,7 +4686,7 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
   }
 
   // Math.random() -> Random [0,1)
-  if (expr === 'Math.random()' || expr === 'java.lang.Math.random()' || expr.includes('Math.random()')) {
+  if (expr === 'Math.random()' || expr === 'java.lang.Math.random()') {
     return {
       id: `rnd_${seq}`,
       type: 'math_java_constants',
@@ -4939,27 +5025,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
     };
   }
 
-  // 0.3 WORLD HEIGHT AT LOCATION: world_data_heightat
-  // e.g. world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, (int) x, (int) z)
-  // e.g. level.getHeight(Heightmap.Types.MOTION_BLOCKING, (int) x, (int) z)
-  const heightAtMatch = expr.match(/(?:world|level|_level)\.getHeight\(\s*Heightmap\.Types\.([A-Z_]+)\s*,\s*(?:\(int\)\s*)?([^,]+)\s*,\s*(?:\(int\)\s*)?([^)]+)\s*\)/);
-  if (heightAtMatch) {
-    const rawType = heightAtMatch[1];
-    const xArg = heightAtMatch[2].trim();
-    const zArg = heightAtMatch[3].trim();
-
-    return {
-      id: `height_at_${seq}`,
-      type: 'world_data_heightat',
-      category: 'world',
-      title: 'Get world height at location',
-      fields: { heightmapType: rawType },
-      values: [
-        { name: 'x', block: parseExpressionToAST(xArg, seq * 10 + 1) },
-        { name: 'z', block: parseExpressionToAST(zArg, seq * 10 + 2) },
-      ],
-    };
-  }
 
   // 1. ENTITY DATA PARAMETER ACCESSORS (SYNCED DATA)
   // NeoForge 1.21.1 / 26.1.2:
@@ -5268,6 +5333,35 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
       values: [
         { name: 'A', block: parseExpressionToAST(left, seq * 10 + 1) },
         { name: 'B', block: parseExpressionToAST(right, seq * 10 + 2) },
+      ],
+    };
+  }
+
+  // World Data Height At: world.getHeight(...) or world.getHeightmapPos(...)
+  if (expr.includes('getHeight') || expr.includes('getHeightmapPos')) {
+    const typeMatch = expr.match(/Heightmap\.Types\.([A-Z_]+)/);
+    const rawType = typeMatch ? typeMatch[1] : 'WORLD_SURFACE';
+    let xArg = 'x', zArg = 'z';
+    const posMatch = expr.match(/BlockPos\.containing\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/);
+    if (posMatch) {
+      xArg = posMatch[1].trim();
+      zArg = posMatch[2].trim();
+    } else {
+      const ghMatch = expr.match(/getHeight\s*\([^,]+,\s*(?:\(int\)\s*)?([^,]+)\s*,\s*(?:\(int\)\s*)?([^)]+)\s*\)/);
+      if (ghMatch) {
+        xArg = ghMatch[1].trim();
+        zArg = ghMatch[2].trim();
+      }
+    }
+    return {
+      id: `height_at_${seq}`,
+      type: 'world_data_heightat',
+      category: 'world',
+      title: 'Get world height at location',
+      fields: { heightmapType: rawType },
+      values: [
+        { name: 'x', block: parseExpressionToAST(xArg, seq * 10 + 1) },
+        { name: 'z', block: parseExpressionToAST(zArg, seq * 10 + 2) },
       ],
     };
   }

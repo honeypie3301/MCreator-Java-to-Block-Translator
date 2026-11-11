@@ -50,6 +50,7 @@ export type BlockCategory =
   | 'damage'
   | 'projectile'
   | 'vector'
+  | 'mcreator_link'
   | 'advanced'
   | 'component'
   | 'gui'

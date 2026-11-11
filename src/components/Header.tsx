@@ -1,5 +1,5 @@
 import React from 'react';
-import { Blocks, Download, Copy, Check, RefreshCw, Layers } from 'lucide-react';
+import { Blocks, Download, Copy, Check, RefreshCw, Layers, BookOpen } from 'lucide-react';
 import { MCreatorElementType, NeoForgeVersion } from '../types';
 import { CustomDropdown } from './CustomDropdown';
 
@@ -11,6 +11,7 @@ interface HeaderProps {
   onReset: () => void;
   onExportFile: () => void;
   onCopyXml: () => void;
+  onOpenBlockLibrary: () => void;
   copied: boolean;
   hasResult: boolean;
   isTranslating: boolean;
@@ -25,36 +26,32 @@ export const Header: React.FC<HeaderProps> = ({
   onReset,
   onExportFile,
   onCopyXml,
+  onOpenBlockLibrary,
   copied,
   hasResult,
   isTranslating,
   fileExtension,
 }) => {
   return (
-    <header className="border-b border-[#2A2622] bg-[#161412] px-4 py-3 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-50 text-[#F5F2EB]">
-      {/* Brand Title */}
-      <div className="flex items-center space-x-3">
-        <div className="p-2 rounded-lg bg-[#2A241F] border border-[#52463C] text-[#E8D8C8] flex items-center justify-center shadow-inner">
-          <Blocks className="w-5 h-5 text-[#CEB098]" />
+    <header className="border-b border-[#2A2622] bg-[#161412] px-3 py-1.5 flex flex-wrap items-center justify-between gap-2 sticky top-0 z-50 text-[#F5F2EB] text-xs">
+      {/* Brand Title - Compact */}
+      <div className="flex items-center space-x-2">
+        <div className="p-1 rounded bg-[#2A241F] border border-[#52463C] text-[#E8D8C8] flex items-center justify-center shadow-inner shrink-0">
+          <Blocks className="w-4 h-4 text-[#CEB098]" />
         </div>
-        <div>
-          <div className="flex items-center space-x-2">
-            <h1 className="text-sm font-semibold tracking-tight text-[#FAF6F0]">
-              MCreator Block Translator
-            </h1>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#2A241F] text-[#CEB098] border border-[#52463C]">
-              2026.1+
-            </span>
-          </div>
-          <p className="text-xs text-[#A39B8E] hidden sm:block">
-            Deterministic Java AST to Blockly Block Converter for NeoForge
-          </p>
+        <div className="flex items-center space-x-2">
+          <h1 className="text-xs font-bold tracking-tight text-[#FAF6F0]">
+            MCreator Block Translator
+          </h1>
+          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#2A241F] text-[#CEB098] border border-[#52463C]">
+            2026.1+
+          </span>
         </div>
       </div>
 
-      {/* Selectors & Actions */}
-      <div className="flex items-center flex-wrap gap-2 text-xs">
-        {/* Element Type Selector (.ptpl, .aitpl, .cmdtpl, .ftpl) */}
+      {/* Selectors & Actions - Compact */}
+      <div className="flex items-center flex-wrap gap-1.5 text-xs">
+        {/* Element Type Selector */}
         <CustomDropdown<MCreatorElementType>
           value={elementType}
           onChange={onChangeElementType}
@@ -81,12 +78,22 @@ export const Header: React.FC<HeaderProps> = ({
           ]}
         />
 
+        {/* Registered Block Database Library Button */}
+        <button
+          onClick={onOpenBlockLibrary}
+          className="px-2.5 py-1 text-xs font-medium rounded-md bg-[#24201D] hover:bg-[#2E2925] text-[#CEB098] border border-[#524438] transition flex items-center space-x-1.5 cursor-pointer shadow-xs"
+          title="Browse all 1,000+ registered MCreator procedure blocks"
+        >
+          <BookOpen className="w-3.5 h-3.5 text-[#CEB098]" />
+          <span>Block Registry (1,000+)</span>
+        </button>
+
         {/* Actions */}
         {hasResult && (
           <>
             <button
               onClick={onCopyXml}
-              className="px-3 py-1.5 text-xs font-medium rounded-md bg-[#24201D] hover:bg-[#2E2925] text-[#FAF6F0] border border-[#423A33] transition flex items-center space-x-1.5"
+              className="px-2.5 py-1 text-xs font-medium rounded-md bg-[#24201D] hover:bg-[#2E2925] text-[#FAF6F0] border border-[#423A33] transition flex items-center space-x-1 cursor-pointer"
               title="Copy MCreator Blockly XML"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-[#CEB098]" /> : <Copy className="w-3.5 h-3.5" />}
@@ -95,7 +102,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             <button
               onClick={onExportFile}
-              className="px-3 py-1.5 text-xs font-semibold rounded-md bg-[#CEB098] hover:bg-[#E2D2C3] active:bg-[#B89980] text-[#1A1816] transition flex items-center space-x-1.5 shadow-sm"
+              className="px-2.5 py-1 text-xs font-semibold rounded-md bg-[#CEB098] hover:bg-[#E2D2C3] active:bg-[#B89980] text-[#1A1816] transition flex items-center space-x-1 shadow-xs cursor-pointer"
               title={`Download ${fileExtension} template for MCreator`}
             >
               <Download className="w-3.5 h-3.5 text-[#1A1816]" />
@@ -107,7 +114,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           onClick={onReset}
           disabled={isTranslating}
-          className="p-1.5 rounded-md bg-[#1F1C19] hover:bg-[#2A2622] text-[#A39B8E] hover:text-[#FAF6F0] border border-[#3B342E] transition disabled:opacity-40"
+          className="p-1 rounded-md bg-[#1F1C19] hover:bg-[#2A2622] text-[#A39B8E] hover:text-[#FAF6F0] border border-[#3B342E] transition disabled:opacity-40 cursor-pointer"
           title="Clear Code Input"
         >
           <RefreshCw className="w-3.5 h-3.5" />

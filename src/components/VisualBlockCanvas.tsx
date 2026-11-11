@@ -178,6 +178,42 @@ const MCREATOR_CATEGORY_THEMES: Record<
     badgeBg: '#00484b',
     badgeText: '#ffffff',
   },
+  feature_ore: {
+    headerBg: '#00838f',
+    bodyBg: '#006064',
+    border: '#00363a',
+    text: '#ffffff',
+    accent: '#4dd0e1',
+    badgeBg: '#00484b',
+    badgeText: '#ffffff',
+  },
+  feature_tree: {
+    headerBg: '#2e7d32',
+    bodyBg: '#1b5e20',
+    border: '#0d3b11',
+    text: '#ffffff',
+    accent: '#81c784',
+    badgeBg: '#144717',
+    badgeText: '#ffffff',
+  },
+  feature_advanced: {
+    headerBg: '#6a1b9a',
+    bodyBg: '#4a148c',
+    border: '#2c0b57',
+    text: '#ffffff',
+    accent: '#ba68c8',
+    badgeBg: '#340d61',
+    badgeText: '#ffffff',
+  },
+  feature_misc: {
+    headerBg: '#00796b',
+    bodyBg: '#004d40',
+    border: '#00251a',
+    text: '#ffffff',
+    accent: '#80cbc4',
+    badgeBg: '#00332a',
+    badgeText: '#ffffff',
+  },
   feature_blocks: {
     headerBg: '#9fa55b',
     bodyBg: '#878c48',
@@ -342,7 +378,12 @@ const MCREATOR_CATEGORY_THEMES: Record<
   },
 };
 
+const complexityCache = new WeakMap<BlockASTNode, { count: number; maxDepth: number; textLen: number }>();
+
 function getNodeComplexity(node: BlockASTNode, depth = 0): { count: number; maxDepth: number; textLen: number } {
+  if (depth === 0 && complexityCache.has(node)) {
+    return complexityCache.get(node)!;
+  }
   let count = 1;
   let maxDepth = depth;
   let textLen = (node.title?.length || 0) + (node.fields ? JSON.stringify(node.fields).length : 0);
@@ -358,7 +399,11 @@ function getNodeComplexity(node: BlockASTNode, depth = 0): { count: number; maxD
       }
     }
   }
-  return { count, maxDepth, textLen };
+  const res = { count, maxDepth, textLen };
+  if (depth === 0) {
+    complexityCache.set(node, res);
+  }
+  return res;
 }
 
 function shouldUseExternalInputs(node: BlockASTNode, layoutMode: string = 'auto'): boolean {
@@ -407,6 +452,42 @@ function hasBlockTypeInAST(node: BlockASTNode, targetType: string): boolean {
   }
   if (node.next && hasBlockTypeInAST(node.next, targetType)) return true;
   return false;
+}
+
+interface CanvasErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface CanvasErrorBoundaryState {
+  hasError: boolean;
+  error: string;
+}
+
+class CanvasErrorBoundary extends React.Component<CanvasErrorBoundaryProps, CanvasErrorBoundaryState> {
+  constructor(props: CanvasErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: '' };
+  }
+
+  static getDerivedStateFromError(error: Error): CanvasErrorBoundaryState {
+    return { hasError: true, error: error?.message || 'Failed to render Blockly AST tree' };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('VisualBlockCanvas Error:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-4 bg-[#2A1816] border border-[#5C2B25] rounded text-amber-200 text-xs font-mono space-y-2">
+          <p className="font-bold text-red-400">⚠️ Unable to render visual block layout for this element structure.</p>
+          <p className="text-amber-300/80">{this.state.error}</p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
@@ -551,14 +632,16 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
           className="relative z-10 space-y-0.5 inline-block min-w-full"
         >
           {viewMode === 'blockly' ? (
-            <BlocklyNodeRenderer
-              node={ast}
-              eventTrigger={eventTrigger}
-              inputLayoutMode={inputLayoutMode}
-              selectedLineNumber={selectedLineNumber}
-              selectedBlockId={selectedBlockId}
-              onSelectBlock={onSelectBlock}
-            />
+            <CanvasErrorBoundary>
+              <BlocklyNodeRenderer
+                node={ast}
+                eventTrigger={eventTrigger}
+                inputLayoutMode={inputLayoutMode}
+                selectedLineNumber={selectedLineNumber}
+                selectedBlockId={selectedBlockId}
+                onSelectBlock={onSelectBlock}
+              />
+            </CanvasErrorBoundary>
           ) : (
             <TreeASTInspector
               node={ast}
@@ -626,42 +709,42 @@ const getBlockTheme = (node: BlockASTNode) => {
     return MCREATOR_CATEGORY_THEMES.command_action_any;
   }
   if (node.category === 'feature_ore' || node.type.startsWith('feature_ore') || node.type === 'feature_scattered_ore' || node.type === 'feature_single_block_ore') {
-    return MCREATOR_CATEGORY_THEMES.feature_ore;
+    return MCREATOR_CATEGORY_THEMES.feature_ore || MCREATOR_CATEGORY_THEMES.feature;
   }
   if (node.category === 'feature_tree' || node.type.startsWith('feature_tree')) {
-    return MCREATOR_CATEGORY_THEMES.feature_tree;
+    return MCREATOR_CATEGORY_THEMES.feature_tree || MCREATOR_CATEGORY_THEMES.feature;
   }
   if (
     node.category === 'feature_advanced' ||
     ['feature_custom_structure', 'feature_root_system', 'feature_vegetation_patch', 'feature_waterlogged_vegetation_patch', 'feature_disk', 'feature_block_column', 'feature_random_selector', 'feature_configured_placement', 'feature_patch'].includes(node.type)
   ) {
-    return MCREATOR_CATEGORY_THEMES.feature_advanced;
+    return MCREATOR_CATEGORY_THEMES.feature_advanced || MCREATOR_CATEGORY_THEMES.feature;
   }
   if (
     node.category === 'feature_misc' ||
     ['feature_geode_simple', 'feature_lake', 'feature_delta', 'feature_spring', 'feature_bamboo', 'feature_seagrass', 'feature_coral_claw', 'feature_coral_mushroom', 'feature_coral_tree', 'feature_huge_brown_mushroom', 'feature_huge_red_mushroom', 'feature_huge_fungus', 'feature_forest_rock', 'feature_underwater_magma', 'feature_block_pile', 'feature_patch_simple', 'feature_replace_sphere', 'feature_blob', 'feature_simple_block', 'feature_empty', 'feature_no_op'].includes(node.type)
   ) {
-    return MCREATOR_CATEGORY_THEMES.feature_misc;
+    return MCREATOR_CATEGORY_THEMES.feature_misc || MCREATOR_CATEGORY_THEMES.feature;
   }
   if (node.category === 'feature_blocks' || node.type.startsWith('blockstate_') || node.type === 'block_tag' || node.type === 'block_list' || node.type === 'ore_target' || node.type === 'disk_rule' || node.type === 'block_column_layer') {
-    return MCREATOR_CATEGORY_THEMES.feature_blocks;
+    return MCREATOR_CATEGORY_THEMES.feature_blocks || MCREATOR_CATEGORY_THEMES.feature;
   }
   if (node.category === 'feature_int_provider' || node.type.startsWith('int_provider_')) {
-    return MCREATOR_CATEGORY_THEMES.feature_int_provider;
+    return MCREATOR_CATEGORY_THEMES.feature_int_provider || MCREATOR_CATEGORY_THEMES.feature;
   }
   if (node.category === 'feature_placement_conditional' || node.type.startsWith('placement_condition') || node.type.startsWith('block_predicate_') || node.type.includes('conditional') || node.type.includes('filter')) {
-    return MCREATOR_CATEGORY_THEMES.feature_placement_conditional;
+    return MCREATOR_CATEGORY_THEMES.feature_placement_conditional || MCREATOR_CATEGORY_THEMES.feature;
   }
   if (node.category === 'feature_placement_height' || node.type.includes('height')) {
-    return MCREATOR_CATEGORY_THEMES.feature_placement_height;
+    return MCREATOR_CATEGORY_THEMES.feature_placement_height || MCREATOR_CATEGORY_THEMES.feature;
   }
   if (node.category === 'feature_placement_common' || node.type.startsWith('placement_')) {
-    return MCREATOR_CATEGORY_THEMES.feature_placement_common;
+    return MCREATOR_CATEGORY_THEMES.feature_placement_common || MCREATOR_CATEGORY_THEMES.feature;
   }
   if (node.type.startsWith('feature_')) {
-    return MCREATOR_CATEGORY_THEMES.feature_misc;
+    return MCREATOR_CATEGORY_THEMES.feature_misc || MCREATOR_CATEGORY_THEMES.feature;
   }
-  return MCREATOR_CATEGORY_THEMES[node.category] || MCREATOR_CATEGORY_THEMES.control;
+  return MCREATOR_CATEGORY_THEMES[node.category] || MCREATOR_CATEGORY_THEMES.feature || MCREATOR_CATEGORY_THEMES.control;
 };
 
 const BlocklyNodeRenderer: React.FC<{
@@ -1173,67 +1256,52 @@ const BlocklyNodeRenderer: React.FC<{
         onClick={(e) => {
           e.stopPropagation();
         }}
-        className={`flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all ${
-          isSelected ? '' : ''
-        }`}
+        className="flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all"
       >
         <div
-          className="rounded-md px-3 py-2 text-white shadow border flex flex-col gap-1.5 min-w-[280px]"
+          className="rounded-md px-2.5 py-1 text-white blockly-3d-bevel flex items-center gap-1.5 text-[11px] font-bold shrink-0 flex-nowrap"
           style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
         >
-          <div className="flex items-center gap-1.5 text-[11px] font-bold">
-            <span>Set location of</span>
-            {entBlock ? (
-              <InlineValueBlock
-                node={entBlock}
-                selectedLineNumber={selectedLineNumber}
-                selectedBlockId={selectedBlockId}
-                onSelectBlock={onSelectBlock}
-              />
-            ) : (
-              <div className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#48836f] text-[10.5px]">
-                Event/target entity
-              </div>
-            )}
-            {node.sourceLine && (
-              <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
-                L{node.sourceLine}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 text-[11px] font-bold pl-1">
-            <span className="w-8 text-right font-medium text-white/90">to x:</span>
-            {xBlock && (
-              <InlineValueBlock
-                node={xBlock}
-                selectedLineNumber={selectedLineNumber}
-                selectedBlockId={selectedBlockId}
-                onSelectBlock={onSelectBlock}
-              />
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 text-[11px] font-bold pl-1">
-            <span className="w-8 text-right font-medium text-white/90">y:</span>
-            {yBlock && (
-              <InlineValueBlock
-                node={yBlock}
-                selectedLineNumber={selectedLineNumber}
-                selectedBlockId={selectedBlockId}
-                onSelectBlock={onSelectBlock}
-              />
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 text-[11px] font-bold pl-1">
-            <span className="w-8 text-right font-medium text-white/90">z:</span>
-            {zBlock && (
-              <InlineValueBlock
-                node={zBlock}
-                selectedLineNumber={selectedLineNumber}
-                selectedBlockId={selectedBlockId}
-                onSelectBlock={onSelectBlock}
-              />
-            )}
-          </div>
+          <span>Set location of</span>
+          {entBlock ? (
+            <InlineValueBlock
+              node={entBlock}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          ) : (
+            <div className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#48836f] text-[10.5px]">
+              Event/target entity
+            </div>
+          )}
+          <span>to x:</span>
+          {xBlock && (
+            <InlineValueBlock
+              node={xBlock}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          <span>y:</span>
+          {yBlock && (
+            <InlineValueBlock
+              node={yBlock}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          <span>z:</span>
+          {zBlock && (
+            <InlineValueBlock
+              node={zBlock}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
         </div>
 
         {node.next && (
@@ -1678,7 +1746,7 @@ const BlocklyNodeRenderer: React.FC<{
       >
         <div
           className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap min-w-[320px]"
-          style={{ backgroundColor: '#00acc1', borderColor: '#00838f' }}
+          style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
         >
           <span className="font-bold text-[11px]">Send message</span>
           {textBlock && (
@@ -2020,8 +2088,8 @@ const BlocklyNodeRenderer: React.FC<{
   // 2.6.7.5 PLAY SOUND
   if (node.type === 'play_sound') {
     const rawSound = node.fields?.sound || 'sound';
-    const soundDisplay = rawSound.replace(/^CUSTOM:/, '');
-    const category = node.fields?.soundcategory || 'ambient';
+    const soundDisplay = rawSound.replace(/^CUSTOM:/, '').replace(/^["']|["']$/g, '');
+    const category = (node.fields?.soundcategory || 'ambient').replace(/^["']|["']$/g, '');
     const xBlock = node.values?.find(v => v.name === 'x')?.block;
     const yBlock = node.values?.find(v => v.name === 'y')?.block;
     const zBlock = node.values?.find(v => v.name === 'z')?.block;
@@ -4029,7 +4097,9 @@ const InlineValueBlock: React.FC<{
     node.type === 'logic_block_cmp' ||
     node.type === 'logic_blockstate_cmp' ||
     node.type === 'logic_damage_source_check' ||
-    node.type === 'logic_entity_subtypeof'
+    node.type === 'logic_entity_subtypeof' ||
+    node.type === 'logic_entity_compare' ||
+    node.type === 'world_data_isremote'
   ) {
     const valA = node.values?.find(v => v.name === 'BOOL' || v.name === 'a' || v.name === 'IF' || v.name === 'entity')?.block;
     const valB = node.values?.find(v => v.name === 'THEN' || v.name === 'b')?.block;
@@ -4040,10 +4110,53 @@ const InlineValueBlock: React.FC<{
         <div
           onClick={(e) => { e.stopPropagation(); }}
           className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
-          style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
+          style={{ backgroundColor: '#5b80a5', borderColor: '#486887' }}
         >
           <span className="font-bold text-[11px]">not</span>
           {valA && <InlineValueBlock node={valA} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        </div>
+      );
+    }
+
+    if (node.type === 'world_data_isremote') {
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: '#5b80a5', borderColor: '#486887' }}
+        >
+          <span className="font-bold text-[11px]">Is provided world client-side</span>
+        </div>
+      );
+    }
+
+    if (node.type === 'logic_entity_compare' || node.type === 'logic_entity_subtypeof') {
+      const rawType = node.fields?.entity || 'Living entity';
+      const displayType = rawType === 'EntityLiving' || rawType.includes('Living')
+        ? 'Living entity'
+        : rawType === 'EntityPlayer' || rawType.includes('Player')
+        ? 'Player'
+        : rawType;
+      const targetBlock = node.values?.find(v => v.name === 'compareTo' || v.name === 'entity')?.block || valA;
+
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: '#5b80a5', borderColor: '#486887' }}
+        >
+          <span className="font-bold text-[11px]">Is</span>
+          {targetBlock ? (
+            <InlineValueBlock node={targetBlock} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+          ) : (
+            <span className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#498671] text-[10.5px]">
+              Event/target entity
+            </span>
+          )}
+          <span className="font-bold text-[11px]">(sub)type of</span>
+          <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+            {displayType} <ChevronDown className="w-3 h-3 opacity-70" />
+          </span>
         </div>
       );
     }

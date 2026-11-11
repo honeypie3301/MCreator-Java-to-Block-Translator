@@ -15,7 +15,7 @@ interface JavaEditorPanelProps {
   onSelectLine?: (lineNumber: number) => void;
 }
 
-const LINE_HEIGHT = 20; // 20px per line (leading-5)
+const LINE_HEIGHT = 18; // 18px compact line height
 
 export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
   code,
@@ -34,8 +34,17 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
   const [scrollTop, setScrollTop] = useState<number>(0);
   const [viewportHeight, setViewportHeight] = useState<number>(400);
 
+  const rafRef = useRef<number | null>(null);
+
+  // Fast zero-allocation line counter for handling large inputs (up to 50,000+ lines)
   const totalLines = useMemo(() => {
-    return Math.max(1, code.split('\n').length);
+    if (!code) return 1;
+    let lines = 1;
+    const len = code.length;
+    for (let i = 0; i < len; i++) {
+      if (code.charCodeAt(i) === 10) lines++;
+    }
+    return lines;
   }, [code]);
 
   const charCount = code.length;
@@ -52,15 +61,26 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
     return () => observer.disconnect();
   }, []);
 
-  // Synchronize scrolling between textarea and line numbers gutter
+  // Synchronize scrolling with RAF throttling for 60fps smooth scrolling
   const handleScroll = useCallback(() => {
     if (textareaRef.current) {
       const top = textareaRef.current.scrollTop;
-      setScrollTop(top);
       if (lineNumbersRef.current) {
         lineNumbersRef.current.scrollTop = top;
       }
+      if (!rafRef.current) {
+        rafRef.current = requestAnimationFrame(() => {
+          setScrollTop(top);
+          rafRef.current = null;
+        });
+      }
     }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -86,31 +106,31 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-[#181614] border border-[#2E2925] rounded-lg overflow-hidden shadow-sm">
-      {/* Top Bar */}
-      <div className="bg-[#121110] px-3 py-2 border-b border-[#2E2925] flex items-center justify-between gap-2 flex-wrap text-xs">
-        <div className="flex items-center space-x-2">
-          <Code2 className="w-4 h-4 text-[#CEB098]" />
-          <span className="font-semibold text-[#FAF6F0]">Java Source Code Input</span>
-          <span className="text-[11px] text-[#A39B8E] font-mono">
+      {/* Top Bar - Compact */}
+      <div className="bg-[#121110] px-2.5 py-1.5 border-b border-[#2E2925] flex items-center justify-between gap-2 flex-wrap text-xs">
+        <div className="flex items-center space-x-1.5">
+          <Code2 className="w-3.5 h-3.5 text-[#CEB098]" />
+          <span className="font-bold text-[#FAF6F0]">Java Source Code Input</span>
+          <span className="text-[10px] text-[#A39B8E] font-mono">
             {totalLines.toLocaleString()} lines | {charCount.toLocaleString()} chars
           </span>
         </div>
       </div>
 
-      {/* Editor Body with Synchronized Gutter */}
+      {/* Editor Body with Synchronized Gutter - Compact */}
       <div
         ref={containerRef}
-        className="relative flex-1 bg-[#0F0E0D] font-mono text-xs flex overflow-hidden select-text"
+        className="relative flex-1 bg-[#0F0E0D] font-mono text-[11px] flex overflow-hidden select-text"
       >
         {/* Virtualized Line Numbers Gutter */}
         <div
           ref={lineNumbersRef}
-          className="select-none bg-[#141210] border-r border-[#24201D] text-[#5C554D] text-right font-mono text-[11px] overflow-hidden shrink-0 z-10 pointer-events-auto"
-          style={{ width: totalLines > 9999 ? '4.5rem' : totalLines > 999 ? '3.75rem' : '3rem' }}
+          className="select-none bg-[#141210] border-r border-[#24201D] text-[#5C554D] text-right font-mono text-[10px] overflow-hidden shrink-0 z-10 pointer-events-auto"
+          style={{ width: totalLines > 9999 ? '4rem' : totalLines > 999 ? '3.25rem' : '2.5rem' }}
         >
           <div
             style={{
-              height: `${totalLines * LINE_HEIGHT + 24}px`,
+              height: `${totalLines * LINE_HEIGHT + 16}px`,
               position: 'relative',
             }}
           >
@@ -118,9 +138,9 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
               return (
                 <div
                   key={lineNum}
-                  className="px-2 leading-[20px] absolute w-full left-0 hover:text-[#FAF6F0]"
+                  className="px-1.5 leading-[18px] absolute w-full left-0 hover:text-[#FAF6F0]"
                   style={{
-                    top: `${(lineNum - 1) * LINE_HEIGHT + 12}px`,
+                    top: `${(lineNum - 1) * LINE_HEIGHT + 8}px`,
                     height: `${LINE_HEIGHT}px`,
                   }}
                 >
@@ -142,7 +162,7 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
             wrap="off"
             placeholder="// Enter or paste your NeoForge 1.21.1+ Java code here...
 // Supporting events (@SubscribeEvent), logic structures (if/else/while/for), math expressions, potion effects, heal, and damage calls."
-            className="w-full h-full p-3 pt-3 bg-transparent text-[#FAF6F0] placeholder-[#5C554D] resize-none outline-none font-mono text-xs selection:bg-[#CEB098]/30 overflow-auto"
+            className="w-full h-full p-2 pt-2 bg-transparent text-[#FAF6F0] placeholder-[#5C554D] resize-none outline-none font-mono text-[11px] selection:bg-[#CEB098]/30 overflow-auto"
             style={{
               lineHeight: `${LINE_HEIGHT}px`,
               whiteSpace: 'pre',

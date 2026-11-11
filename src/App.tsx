@@ -1,35 +1,65 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import * as pako from 'pako';
 import { Header } from './components/Header';
 import { JavaEditorPanel } from './components/JavaEditorPanel';
-import { VisualBlockCanvas } from './components/VisualBlockCanvas';
-import { BlocklyXmlViewer } from './components/BlocklyXmlViewer';
-import { ProcedureSpecPanel } from './components/ProcedureSpecPanel';
-import { BreakdownTable } from './components/BreakdownTable';
 import { translateJavaToMCreator } from './lib/mcreatorConverter';
 import { MCreatorElementType, NeoForgeVersion, TranslationResult } from './types';
-import { Layers, FileCode, Cpu, ListCheck, Play, CheckCircle2, X } from 'lucide-react';
+import { Layers, FileCode, Cpu, ListCheck, Play, CheckCircle2, X, AlertCircle } from 'lucide-react';
 import { CustomDropdown } from './components/CustomDropdown';
 
-const DEFAULT_JAVA_INPUT = `package com.backwoods.mod.procedures;
+import { BlockLibraryModal } from './components/BlockLibraryModal';
 
-import net.neoforged.neoforge.event.tick.PlayerTickEvent;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.level.Level;
+const VisualBlockCanvas = lazy(() => import('./components/VisualBlockCanvas').then(m => ({ default: m.VisualBlockCanvas })));
+const BlocklyXmlViewer = lazy(() => import('./components/BlocklyXmlViewer').then(m => ({ default: m.BlocklyXmlViewer })));
+const ProcedureSpecPanel = lazy(() => import('./components/ProcedureSpecPanel').then(m => ({ default: m.ProcedureSpecPanel })));
+const BreakdownTable = lazy(() => import('./components/BreakdownTable').then(m => ({ default: m.BreakdownTable })));
 
-public class ParanoiaAudioLogicProcedure {
-    @SubscribeEvent
-    public void onPlayerTick(PlayerTickEvent.Post event) {
-        Player player = event.getEntity();
-        if (player.getHealth() < 10 || player.getFoodData().getFoodLevel() < 10) {
-            if (Math.random() < 0.005) {
-                if (player.level().dimension() == Backwoods) {
-                    world.playSound("wood_creak_paranoia", x + Math.random()*10 - 5, y, z + Math.random()*10 - 5, 0.7f, 0.7f + Math.random()*0.3f, "ambient");
-                }
-            }
-        }
-    }
+const DEFAULT_JAVA_INPUT = `package net.mcreator.thebackwoods.procedures;
+
+/* imports omitted */
+
+public class GeodeTeleporterEntityCollidesInTheBlockProcedure {
+	public static void execute(LevelAccessor world, double x, double y, double z, Entity entity) {
+		if (entity == null)
+			return;
+		if (entity instanceof LivingEntity) {
+			if (!world.isClientSide()) {
+				TheBackwoodsMod.queueServerWork(60, () -> {
+					if (entity instanceof LivingEntity _entity && !_entity.level().isClientSide())
+						_entity.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 150, 4, false, false));
+					if (world instanceof Level _level) {
+						if (!_level.isClientSide()) {
+							_level.playSound(null, BlockPos.containing(x, y, z), BuiltInRegistries.SOUND_EVENT.get(ResourceLocation.parse("ambient.cave")), SoundSource.AMBIENT, 1, (float) 0.5);
+						} else {
+							_level.playLocalSound(x, y, z, BuiltInRegistries.SOUND_EVENT.get(ResourceLocation.parse("ambient.cave")), SoundSource.AMBIENT, 1, (float) 0.5, false);
+						}
+					}
+					TheBackwoodsMod.queueServerWork(90, () -> {
+						if (entity instanceof ServerPlayer _player && !_player.level().isClientSide()) {
+							ResourceKey<Level> destinationType = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse("the_backwoods:rotting"));
+							if (_player.level().dimension() == destinationType)
+								return;
+							ServerLevel nextLevel = _player.server.getLevel(destinationType);
+							if (nextLevel != null) {
+								_player.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.WIN_GAME, 0));
+								_player.teleportTo(nextLevel, _player.getX(), _player.getY(), _player.getZ(), _player.getYRot(), _player.getXRot());
+								_player.connection.send(new ClientboundPlayerAbilitiesPacket(_player.getAbilities()));
+								for (MobEffectInstance _effectinstance : _player.getActiveEffects())
+									_player.connection.send(new ClientboundUpdateMobEffectPacket(_player.getId(), _effectinstance, false));
+								_player.connection.send(new ClientboundLevelEventPacket(1032, BlockPos.ZERO, 0, false));
+							}
+						}
+						{
+							Entity _ent = entity;
+							_ent.teleportTo(x, (world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, (int) x, (int) z) + 4), z);
+							if (_ent instanceof ServerPlayer _serverPlayer)
+								_serverPlayer.connection.teleport(x, (world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, (int) x, (int) z) + 4), z, _ent.getYRot(), _ent.getXRot());
+						}
+					});
+				});
+			}
+		}
+	}
 }`;
 
 export default function App() {
@@ -43,7 +73,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
   const [selectedMethod, setSelectedMethod] = useState<string | undefined>(undefined);
-
+  const [isBlockLibraryOpen, setIsBlockLibraryOpen] = useState<boolean>(false);
 
   // "Already Converted" Popup State
   const [showAlreadyConvertedToast, setShowAlreadyConvertedToast] = useState<boolean>(false);
@@ -172,34 +202,59 @@ export default function App() {
         onReset={handleReset}
         onExportFile={handleExportFile}
         onCopyXml={handleCopyXml}
+        onOpenBlockLibrary={() => setIsBlockLibraryOpen(true)}
         copied={copied}
         hasResult={!!result}
         isTranslating={isTranslating}
         fileExtension={result?.fileExtension || '.ptpl'}
       />
 
+      {/* Block Library Modal */}
+      <BlockLibraryModal
+        isOpen={isBlockLibraryOpen}
+        onClose={() => setIsBlockLibraryOpen(false)}
+      />
+
       {/* "Already Converted" Pop-up Alert Banner */}
       {showAlreadyConvertedToast && (
-        <div className="bg-[#1e2316] border-b border-emerald-600/50 px-4 py-2.5 flex items-center justify-between text-emerald-200 text-xs shadow-md transition-all animate-fadeIn">
-          <div className="flex items-center space-x-2.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="font-medium">
+        <div className="bg-[#1e2316] border-b border-emerald-600/50 px-3 py-1.5 flex items-center justify-between text-emerald-200 text-xs shadow-md transition-all animate-fadeIn">
+          <div className="flex items-center space-x-2">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="font-medium text-[11px]">
               <strong>Already Converted!</strong> This Java code has already been parsed and converted to MCreator Blockly blocks without any modifications.
             </span>
           </div>
           <button
             onClick={() => setShowAlreadyConvertedToast(false)}
-            className="text-emerald-400 hover:text-emerald-100 p-1 rounded hover:bg-emerald-900/30 transition cursor-pointer"
+            className="text-emerald-400 hover:text-emerald-100 p-0.5 rounded hover:bg-emerald-900/30 transition cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
-      {/* Main Grid View */}
-      <main className="flex-1 p-2.5 sm:p-3 grid grid-cols-1 lg:grid-cols-12 gap-3 max-w-[1920px] w-full mx-auto overflow-hidden">
+      {/* Feature (.ftpl) Single Window Warning Banner */}
+      {elementType === 'feature' && (
+        <div className="bg-[#2a1d18] border-b border-amber-600/50 px-3 py-1.5 flex items-center justify-between text-amber-200 text-xs shadow-md transition-all animate-fadeIn">
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="font-medium text-[11px]">
+              <strong>Feature (.ftpl) Unsupported in Single Window:</strong> Minecraft 1.20+ features require dual JSON definitions (Configured & Placed Feature). Multi-file feature conversion is not supported in a single input window.
+            </span>
+          </div>
+          <button
+            onClick={() => setElementType('procedure')}
+            className="px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 rounded font-mono text-[10px] transition cursor-pointer shrink-0 ml-2"
+          >
+            Switch to Procedure (.ptpl)
+          </button>
+        </div>
+      )}
+
+      {/* Main Grid View - Compact Layout */}
+      <main className="flex-1 p-1.5 sm:p-2 grid grid-cols-1 lg:grid-cols-12 gap-2 max-w-[1920px] w-full mx-auto overflow-hidden">
         {/* Left Column: Java Code Editor */}
-        <div className="lg:col-span-5 h-[calc(100vh-5.2rem)] min-h-[500px]">
+        <div className="lg:col-span-5 h-[calc(100vh-2.8rem)] min-h-[450px]">
           <JavaEditorPanel
             code={code}
             onChangeCode={(newCode) => {
@@ -214,9 +269,9 @@ export default function App() {
         </div>
 
         {/* Right Column: MCreator Block Translation Canvas */}
-        <div className="lg:col-span-7 h-[calc(100vh-5.2rem)] min-h-[500px] flex flex-col bg-[#181614] border border-[#2E2925] rounded-lg overflow-hidden shadow-sm">
-          {/* Navigation Tabs */}
-          <div className="bg-[#121110] border-b border-[#2E2925] px-3 py-2 flex items-center justify-between flex-wrap gap-2 text-xs">
+        <div className="lg:col-span-7 h-[calc(100vh-2.8rem)] min-h-[450px] flex flex-col bg-[#181614] border border-[#2E2925] rounded-lg overflow-hidden shadow-sm">
+          {/* Navigation Tabs - Compact */}
+          <div className="bg-[#121110] border-b border-[#2E2925] px-2.5 py-1.5 flex items-center justify-between flex-wrap gap-1.5 text-xs">
             <div className="flex items-center space-x-1">
               <button
                 onClick={() => setActiveTab('visual')}
@@ -314,7 +369,12 @@ export default function App() {
                 <p>Input your Java code and click "Convert Code to Blocks".</p>
               </div>
             ) : (
-              <>
+              <Suspense fallback={
+                <div className="h-full flex flex-col items-center justify-center text-center space-y-2 py-12 text-[#A39B8E]">
+                  <div className="w-6 h-6 border-2 border-[#CEB098]/30 border-t-[#CEB098] rounded-full animate-spin" />
+                  <span className="text-xs font-mono">Loading workspace view...</span>
+                </div>
+              }>
                 {activeTab === 'visual' && (
                   <VisualBlockCanvas
                     ast={result.visualAST}
@@ -341,7 +401,7 @@ export default function App() {
                     breakdown={result.translationBreakdown}
                   />
                 )}
-              </>
+              </Suspense>
             )}
           </div>
         </div>
