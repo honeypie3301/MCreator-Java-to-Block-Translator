@@ -142,6 +142,7 @@ export function getBlockCanonicalCategory(block: BlockDefinition): string {
   }
 
   // 6. General ID prefix checks
+  if (id.startsWith('projectile') || id.startsWith('projectiles_') || cat === 'projectile') return 'Projectile procedures';
   if (id.startsWith('direction_') || cat === 'direction') return 'Direction procedures';
   if (id.startsWith('gui_') || id.startsWith('slot_') || cat === 'gui') return 'Slot & GUI procedures';
   if (id.startsWith('component_') || cat === 'component') return 'Minecraft components';
@@ -363,16 +364,34 @@ export const BlockLibraryModal: React.FC<BlockLibraryModalProps> = ({ isOpen, on
                     {/* Block Title Header */}
                     <div>
                       <div className="flex items-start justify-between gap-1.5 mb-1">
-                        <span
-                          className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider shrink-0"
-                          style={{
-                            backgroundColor: theme.bg,
-                            color: theme.text,
-                            border: `1px solid ${theme.border}`,
-                          }}
-                        >
-                          {canonicalCategory}
-                        </span>
+                        {(() => {
+                          let subBreadcrumb = '';
+                          if (block.toolboxPath) {
+                            if (block.toolboxPath.includes('-> Data') || block.toolboxPath.includes('Check data')) subBreadcrumb = 'Data';
+                            else if (block.toolboxPath.includes('-> Actions') || block.toolboxPath.includes('Management')) subBreadcrumb = 'Actions';
+                          } else if (block.toolbox) {
+                            if (block.toolbox.includes('data')) subBreadcrumb = 'Data';
+                            else if (block.toolbox.includes('management') || block.toolbox.includes('action')) subBreadcrumb = 'Actions';
+                          }
+                          return (
+                            <span
+                              className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider shrink-0 flex items-center gap-1"
+                              style={{
+                                backgroundColor: theme.bg,
+                                color: theme.text,
+                                border: `1px solid ${theme.border}`,
+                              }}
+                            >
+                              <span>{canonicalCategory}</span>
+                              {subBreadcrumb && (
+                                <>
+                                  <span className="opacity-60 text-[9px]">▸</span>
+                                  <span>{subBreadcrumb}</span>
+                                </>
+                              )}
+                            </span>
+                          );
+                        })()}
                         <span className="font-mono text-[10px] text-[#CEB098] bg-[#221E1B] px-1.5 py-0.5 rounded border border-[#3A332C] truncate max-w-[140px]">
                           {block.mcreatorType || block.id}
                         </span>

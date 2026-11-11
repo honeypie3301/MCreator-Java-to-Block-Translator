@@ -409,9 +409,12 @@ function getNodeComplexity(node: BlockASTNode, depth = 0): { count: number; maxD
 function shouldUseExternalInputs(node: BlockASTNode, layoutMode: string = 'auto'): boolean {
   if (layoutMode === 'inline') return false;
   if (layoutMode === 'external') return true;
-  // Never force math operations or common procedural statements into external layout
+  // Never force math, logic binary/comparison, or common procedural statements into external layout
   if (
     node.type.startsWith('math_') ||
+    node.type === 'logic_compare' ||
+    node.type === 'logic_binary' ||
+    node.type === 'logic_negate' ||
     node.type === 'spawn_particle_multi' ||
     node.type === 'spawn_particle' ||
     node.type === 'play_sound' ||
@@ -1237,6 +1240,184 @@ const BlocklyNodeRenderer: React.FC<{
               selectedBlockId={selectedBlockId}
               onSelectBlock={onSelectBlock}
             />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Clear all potion effects of entity (entity_clearpotions)
+  if (node.type === 'entity_clearpotions') {
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => { e.stopPropagation(); }}
+        className="flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all"
+      >
+        <div
+          className="rounded-md px-2.5 py-1 text-white blockly-3d-bevel flex items-center gap-1.5 text-[11px] font-bold shrink-0 flex-nowrap"
+          style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
+        >
+          <span>Clear all potion effects of</span>
+          {entBlock ? (
+            <InlineValueBlock node={entBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+          ) : (
+            <div className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#48836f] text-[10.5px]">
+              Event/target entity
+            </div>
+          )}
+        </div>
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer node={node.next} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Remove specific potion effect from entity (entity_remove_specific_potion_effect)
+  if (node.type === 'entity_remove_specific_potion_effect') {
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    const potion = node.fields?.potion || 'REGENERATION';
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => { e.stopPropagation(); }}
+        className="flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all"
+      >
+        <div
+          className="rounded-md px-2.5 py-1 text-white blockly-3d-bevel flex items-center gap-1.5 text-[11px] font-bold shrink-0 flex-nowrap"
+          style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
+        >
+          <span>Remove specific potion effect</span>
+          <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+            {potion} <ChevronDown className="w-3 h-3 opacity-70" />
+          </span>
+          <span>from</span>
+          {entBlock ? (
+            <InlineValueBlock node={entBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+          ) : (
+            <div className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#48836f] text-[10.5px]">
+              Event/target entity
+            </div>
+          )}
+        </div>
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer node={node.next} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 2.7.5 DEAL DAMAGE (Deal [amount] damage to [entity] from source [damagesource])
+  if (node.type === 'deal_damage') {
+    const amtBlock = node.values?.find(v => v.name === 'amount')?.block;
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    const dsBlock = node.values?.find(v => v.name === 'damagesource')?.block;
+
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => { e.stopPropagation(); }}
+        className="flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all"
+      >
+        <div
+          className="rounded-md px-2.5 py-1 text-white blockly-3d-bevel flex items-center gap-1.5 text-[11px] font-bold shrink-0 flex-nowrap"
+          style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
+        >
+          <span>Deal</span>
+          {amtBlock && (
+            <InlineValueBlock node={amtBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+          )}
+          <span>damage to</span>
+          {entBlock ? (
+            <InlineValueBlock node={entBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+          ) : (
+            <div className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#48836f] text-[10.5px]">
+              Event/target entity
+            </div>
+          )}
+          <span>from source</span>
+          {dsBlock && (
+            <InlineValueBlock node={dsBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+          )}
+        </div>
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer node={node.next} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Set entity on fire: entity_set_on_fire
+  if (node.type === 'entity_set_on_fire') {
+    const secBlock = node.values?.find(v => v.name === 'seconds')?.block;
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => { e.stopPropagation(); }}
+        className="flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all"
+      >
+        <div
+          className="rounded-md px-2.5 py-1 text-white blockly-3d-bevel flex items-center gap-1.5 text-[11px] font-bold shrink-0 flex-nowrap"
+          style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
+        >
+          <span>Set</span>
+          {entBlock ? (
+            <InlineValueBlock node={entBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+          ) : (
+            <span className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#48836f] text-[10.5px]">
+              Event/target entity
+            </span>
+          )}
+          <span>on fire for</span>
+          {secBlock && (
+            <InlineValueBlock node={secBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+          )}
+          <span>seconds</span>
+        </div>
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer node={node.next} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Set team friendly fire: team_set_friendlyfire
+  if (node.type === 'team_set_friendlyfire') {
+    const nameBlock = node.values?.find(v => v.name === 'name')?.block;
+    const condBlock = node.values?.find(v => v.name === 'condition')?.block;
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => { e.stopPropagation(); }}
+        className="flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all"
+      >
+        <div
+          className="rounded-md px-2.5 py-1 text-white blockly-3d-bevel flex items-center gap-1.5 text-[11px] font-bold shrink-0 flex-nowrap"
+          style={{ backgroundColor: '#b58f3d', borderColor: '#87692b' }}
+        >
+          <span>Set friendly fire for team with name</span>
+          {nameBlock && (
+            <InlineValueBlock node={nameBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+          )}
+          <span>to</span>
+          {condBlock && (
+            <InlineValueBlock node={condBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+          )}
+        </div>
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer node={node.next} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
           </div>
         )}
       </div>
@@ -3276,6 +3457,228 @@ const InlineValueBlock: React.FC<{
         <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
           {diff} <ChevronDown className="w-3 h-3 opacity-70" />
         </span>
+      </div>
+    );
+  }
+
+  // Potion Effect Level: Get effect amplifier of potion [potion ▾] for [entity] if active
+  if (node.type === 'entity_potioneffectlevel') {
+    const potion = node.fields?.potion || 'DARKNESS';
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); }}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: '#5b80a5', borderColor: '#486887' }}
+      >
+        <span className="font-bold text-[11px]">Get effect amplifier of potion</span>
+        <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+          {potion} <ChevronDown className="w-3 h-3 opacity-70" />
+        </span>
+        <span className="font-bold text-[11px]">for</span>
+        {entBlock ? (
+          <InlineValueBlock node={entBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+        ) : (
+          <span className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#498671] text-[10.5px]">
+            Event/target entity
+          </span>
+        )}
+        <span className="font-bold text-[11px]">if active</span>
+      </div>
+    );
+  }
+
+  // Potion Effect Remaining: Get remaining ticks of potion [potion ▾] for [entity]
+  if (node.type === 'entity_potioneffectremaining') {
+    const potion = node.fields?.potion || 'DARKNESS';
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); }}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: '#5b80a5', borderColor: '#486887' }}
+      >
+        <span className="font-bold text-[11px]">Get remaining ticks of potion</span>
+        <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+          {potion} <ChevronDown className="w-3 h-3 opacity-70" />
+        </span>
+        <span className="font-bold text-[11px]">for</span>
+        {entBlock ? (
+          <InlineValueBlock node={entBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+        ) : (
+          <span className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#498671] text-[10.5px]">
+            Event/target entity
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  // Has Active Potion: Has [entity] active potion [potion ▾]
+  if (node.type === 'entity_haspotioneffect') {
+    const potion = node.fields?.potion || 'DARKNESS';
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); }}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: '#5b80a5', borderColor: '#486887' }}
+      >
+        <span className="font-bold text-[11px]">Has</span>
+        {entBlock ? (
+          <InlineValueBlock node={entBlock} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+        ) : (
+          <span className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#498671] text-[10.5px]">
+            Event/target entity
+          </span>
+        )}
+        <span className="font-bold text-[11px]">active potion</span>
+        <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+          {potion} <ChevronDown className="w-3 h-3 opacity-70" />
+        </span>
+      </div>
+    );
+  }
+
+  // Get Potion Item: Get [type ▾] of [potion ▾] as item
+  if (node.type === 'item_get_potion') {
+    const pType = node.fields?.type || 'POTION';
+    const typeLabel = pType === 'SPLASH_POTION' ? 'Splash potion' : pType === 'LINGERING_POTION' ? 'Lingering potion' : 'Potion';
+    const potion = node.fields?.potion || 'AWKWARD';
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); }}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: '#a55b6d', borderColor: '#874857' }}
+      >
+        <span className="font-bold text-[11px]">Get</span>
+        <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+          {typeLabel} <ChevronDown className="w-3 h-3 opacity-70" />
+        </span>
+        <span className="font-bold text-[11px]">of</span>
+        <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+          {potion} <ChevronDown className="w-3 h-3 opacity-70" />
+        </span>
+        <span className="font-bold text-[11px]">as item</span>
+      </div>
+    );
+  }
+
+  // Potion Projectile: [potionType ▾] potion of [potion ▾] with acceleration ax: [ax] ay: [ay] az: [az] shooter: [shooter]
+  if (node.type === 'projectiles_potion') {
+    const pType = node.fields?.potionType || 'SPLASH_POTION';
+    const typeLabel = pType === 'LINGERING_POTION' ? 'Lingering' : 'Splash';
+    const potion = node.fields?.potion || 'AWKWARD';
+    const ax = node.values?.find(v => v.name === 'ax')?.block;
+    const ay = node.values?.find(v => v.name === 'ay')?.block;
+    const az = node.values?.find(v => v.name === 'az')?.block;
+    const shooter = node.values?.find(v => v.name === 'shooter')?.block;
+
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); }}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 flex-wrap"
+        style={{ backgroundColor: '#a55b9a', borderColor: '#87487d' }}
+      >
+        <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+          {typeLabel} <ChevronDown className="w-3 h-3 opacity-70" />
+        </span>
+        <span className="font-bold text-[11px]">potion of</span>
+        <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+          {potion} <ChevronDown className="w-3 h-3 opacity-70" />
+        </span>
+        <span className="font-bold text-[11px]">with acceleration ax:</span>
+        {ax && <InlineValueBlock node={ax} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        <span className="font-bold text-[11px]">ay:</span>
+        {ay && <InlineValueBlock node={ay} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        <span className="font-bold text-[11px]">az:</span>
+        {az && <InlineValueBlock node={az} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        <span className="font-bold text-[11px]">shooter:</span>
+        {shooter && <InlineValueBlock node={shooter} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+      </div>
+    );
+  }
+
+  // Damage Source from type: Damage source of type: [ Thorns ▾ ]
+  if (node.type === 'damagesource_from_type') {
+    const rawType = node.fields?.damagetype || 'thorns';
+    const cleanType = rawType.replace(/^CUSTOM:/, '').replace(/^DamageTypes\./, '');
+    const formatted = cleanType.charAt(0).toUpperCase() + cleanType.slice(1).toLowerCase();
+
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); }}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: '#b53d75', borderColor: '#872b53' }}
+      >
+        <span className="font-bold text-[11px]">Damage source of type:</span>
+        <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+          {formatted}
+        </span>
+      </div>
+    );
+  }
+
+  // Water blocks: isinwater, isinwater_orbubblecolumn, isinwaterrain_orbubblecolumn, is_underwater, block_is_waterloggable
+  if (
+    node.type === 'entity_isinwater' ||
+    node.type === 'entity_isinwater_orbubblecolumn' ||
+    node.type === 'entity_isinwaterrain_orbubblecolumn' ||
+    node.type === 'entity_is_underwater' ||
+    node.type === 'block_is_waterloggable'
+  ) {
+    const isBlock = node.type === 'block_is_waterloggable';
+    const label = node.type === 'entity_isinwater' ? 'Is in water'
+      : node.type === 'entity_isinwater_orbubblecolumn' ? 'Is in water or bubble column'
+      : node.type === 'entity_isinwaterrain_orbubblecolumn' ? 'Is in water, rain, or bubble column'
+      : node.type === 'entity_is_underwater' ? 'Is underwater'
+      : 'Is waterloggable';
+    const targetBlock = node.values?.find(v => v.name === 'entity' || v.name === 'block')?.block;
+
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); }}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: isBlock ? '#b58f3d' : '#5b80a5', borderColor: isBlock ? '#87692b' : '#486887' }}
+      >
+        <span className="font-bold text-[11px]">{label}</span>
+        {targetBlock ? (
+          <InlineValueBlock node={targetBlock} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+        ) : (
+          <span className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#498671] text-[10.5px]">
+            {isBlock ? 'Block' : 'Event/target entity'}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  // Fire & Team Scoreboard blocks
+  if (
+    node.type === 'entity_get_fire_ticks' ||
+    node.type === 'entity_isimmunetofire' ||
+    node.type === 'team_get_friendlyfire'
+  ) {
+    const label = node.type === 'entity_get_fire_ticks' ? 'Get remaining ticks on fire of'
+      : node.type === 'entity_isimmunetofire' ? 'Is immune to fire'
+      : 'Is friendly fire for team with name enabled';
+    const targetBlock = node.values?.find(v => v.name === 'entity' || v.name === 'name')?.block;
+    const isWorld = node.type === 'team_get_friendlyfire';
+
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); }}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: isWorld ? '#b58f3d' : '#5b80a5', borderColor: isWorld ? '#87692b' : '#486887' }}
+      >
+        <span className="font-bold text-[11px]">{label}</span>
+        {targetBlock ? (
+          <InlineValueBlock node={targetBlock} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+        ) : (
+          <span className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#498671] text-[10.5px]">
+            {isWorld ? 'team_name' : 'Event/target entity'}
+          </span>
+        )}
       </div>
     );
   }

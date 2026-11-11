@@ -513,6 +513,13 @@ function unwrapMCreatorBoilerplate(text: string): string {
     ''
   );
 
+  // -0.6. Unwrap inline LivingEntity hasEffect boilerplate:
+  // (entity instanceof LivingEntity _livEnt1 && _livEnt1.hasEffect(...)) -> entity.hasEffect(...)
+  s = s.replace(
+    /\(?\s*([a-zA-Z0-9_.]+)\s+instanceof\s+LivingEntity\s+([_a-zA-Z0-9]+)\s*&&\s*\2\.hasEffect\(([^)]+)\)\s*\)?/g,
+    (_, ent, _alias, pot) => `${ent}.hasEffect(${pot.trim()})`
+  );
+
   // -0.5. Unwrap entity despawn guard:
   // if (!entity.level().isClientSide()) entity.discard();
   // if (!_ent.level().isClientSide()) _ent.discard();
@@ -2528,6 +2535,24 @@ function parseJavaStatementInternal(
       values: [
         { name: 'entity', block: parseExpressionToAST(rawEntity, idSeq * 10 + 1) },
         { name: 'value', block: parseExpressionToAST(valExpr.replace(/opt\.toInt\(([^)]+)\)/, '$1'), idSeq * 10 + 2) },
+      ],
+    };
+  }
+
+  // Team set friendly fire: team_set_friendlyfire
+  if (stmt.includes('setAllowFriendlyFire(')) {
+    const teamMatch = stmt.match(/([a-zA-Z0-9_.]+)\.setAllowFriendlyFire\s*\(\s*([^)]+)\s*\)/);
+    const teamExpr = teamMatch ? teamMatch[1].trim() : '"team_name"';
+    const condExpr = teamMatch ? teamMatch[2].trim() : 'true';
+    breakdown.push({ javaLine: stmt, mcreatorBlock: 'team_set_friendlyfire', explanation: 'Set friendly fire for team' });
+    return {
+      id: `set_ff_${idSeq}`,
+      type: 'team_set_friendlyfire',
+      category: 'world',
+      title: 'Set friendly fire for team with name to',
+      values: [
+        { name: 'name', block: parseExpressionToAST(teamExpr, idSeq * 10 + 1) },
+        { name: 'condition', block: parseExpressionToAST(condExpr, idSeq * 10 + 2) },
       ],
     };
   }
@@ -5366,6 +5391,277 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
     };
   }
 
+  // Potion Effect Remaining Ticks: entity_potioneffectremaining
+  if (expr.includes('.getEffect(') && expr.includes('.getDuration()')) {
+    const potMatch = expr.match(/getEffect\s*\(\s*(?:MobEffects\.)?([a-zA-Z0-9_]+)\s*\)/);
+    const potName = potMatch ? potMatch[1] : 'DARKNESS';
+    const entMatch = expr.match(/^([a-zA-Z0-9_]+)\./) || expr.match(/\(\s*([a-zA-Z0-9_]+)\s+instanceof\s+LivingEntity/);
+    const rawEnt = entMatch ? entMatch[1] : 'entity';
+    const targetAST: BlockASTNode = (rawEnt === 'entity' || rawEnt === '_livEnt' || rawEnt === '_entity' || rawEnt === '_ent')
+      ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
+      : parseExpressionToAST(rawEnt, seq * 10 + 1);
+
+    return {
+      id: `pot_dur_${seq}`,
+      type: 'entity_potioneffectremaining',
+      category: 'entity',
+      title: 'Get remaining ticks of potion for',
+      fields: { potion: potName },
+      values: [{ name: 'entity', block: targetAST }],
+    };
+  }
+
+  // Potion Effect Level / Amplifier: entity_potioneffectlevel
+  if (expr.includes('.getEffect(') && expr.includes('.getAmplifier()')) {
+    const potMatch = expr.match(/getEffect\s*\(\s*(?:MobEffects\.)?([a-zA-Z0-9_]+)\s*\)/);
+    const potName = potMatch ? potMatch[1] : 'DARKNESS';
+    const entMatch = expr.match(/^([a-zA-Z0-9_]+)\./) || expr.match(/\(\s*([a-zA-Z0-9_]+)\s+instanceof\s+LivingEntity/);
+    const rawEnt = entMatch ? entMatch[1] : 'entity';
+    const targetAST: BlockASTNode = (rawEnt === 'entity' || rawEnt === '_livEnt' || rawEnt === '_entity' || rawEnt === '_ent')
+      ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
+      : parseExpressionToAST(rawEnt, seq * 10 + 1);
+
+    return {
+      id: `pot_amp_${seq}`,
+      type: 'entity_potioneffectlevel',
+      category: 'entity',
+      title: 'Get effect amplifier of potion for if active',
+      fields: { potion: potName },
+      values: [{ name: 'entity', block: targetAST }],
+    };
+  }
+
+  // Has Potion Effect: entity_haspotioneffect
+  if (expr.includes('.hasEffect(')) {
+    const potMatch = expr.match(/hasEffect\s*\(\s*(?:[a-zA-Z0-9_]+\.)?([a-zA-Z0-9_]+)\s*\)/);
+    let potName = potMatch ? potMatch[1] : 'DARKNESS';
+    // Format custom PascalCase effect names (e.g. INOCULATION_EFFECT -> InoculationEffect)
+    if (potName.includes('_') || /^[A-Z0-9_]+$/.test(potName)) {
+      potName = potName.split('_').map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join('');
+    }
+    const entMatch = expr.match(/^([a-zA-Z0-9_]+)\./) || expr.match(/\(\s*([a-zA-Z0-9_]+)\s+instanceof\s+LivingEntity/);
+    const rawEnt = entMatch ? entMatch[1] : 'entity';
+    const targetAST: BlockASTNode = (rawEnt === 'entity' || rawEnt === '_livEnt' || rawEnt === '_entity' || rawEnt === '_ent')
+      ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
+      : parseExpressionToAST(rawEnt, seq * 10 + 1);
+
+    return {
+      id: `has_pot_${seq}`,
+      type: 'entity_haspotioneffect',
+      category: 'entity',
+      title: 'Has active potion',
+      fields: { potion: potName },
+      values: [{ name: 'entity', block: targetAST }],
+    };
+  }
+
+  // Get Potion as Item: item_get_potion
+  if (expr.includes('PotionContents.createItemStack') || (expr.includes('Items.POTION') || expr.includes('Items.SPLASH_POTION') || expr.includes('Items.LINGERING_POTION'))) {
+    let potType = 'POTION';
+    if (expr.includes('SPLASH_POTION')) potType = 'SPLASH_POTION';
+    else if (expr.includes('LINGERING_POTION')) potType = 'LINGERING_POTION';
+
+    const potMatch = expr.match(/(?:Potions\.|ResourceLocation\.parse\(["'](?:minecraft:)?)([^"'\)]+)["'\)]/);
+    const potName = potMatch ? potMatch[1] : 'AWKWARD';
+
+    return {
+      id: `item_pot_${seq}`,
+      type: 'item_get_potion',
+      category: 'item',
+      title: 'Get of as item',
+      fields: { type: potType, potion: potName },
+    };
+  }
+
+  // Potion Projectile: projectiles_potion
+  if (expr.includes('createPotionProjectile')) {
+    let potType = 'SPLASH_POTION';
+    if (expr.includes('LINGERING_POTION')) potType = 'LINGERING_POTION';
+
+    const potMatch = expr.match(/(?:Potions\.|ResourceLocation\.parse\(["'](?:minecraft:)?)([^"'\)]+)["'\)]/);
+    const potName = potMatch ? potMatch[1] : 'AWKWARD';
+
+    let ax = '0', ay = '0', az = '0', shooter = 'entity';
+    const vecMatch = expr.match(/new\s+Vec3\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\s*\)/);
+    if (vecMatch) {
+      ax = vecMatch[1].trim();
+      ay = vecMatch[2].trim();
+      az = vecMatch[3].trim();
+    }
+    const shootMatch = expr.match(/createPotionProjectile\s*\([^,]+,[^,]+,\s*([^,]+),/);
+    if (shootMatch) shooter = shootMatch[1].trim();
+
+    return {
+      id: `proj_pot_${seq}`,
+      type: 'projectiles_potion',
+      category: 'projectile',
+      title: 'potion of with acceleration ax: ay: az: shooter:',
+      fields: { potionType: potType, potion: potName },
+      values: [
+        { name: 'ax', block: parseExpressionToAST(ax, seq * 10 + 1) },
+        { name: 'ay', block: parseExpressionToAST(ay, seq * 10 + 2) },
+        { name: 'az', block: parseExpressionToAST(az, seq * 10 + 3) },
+        { name: 'shooter', block: (shooter === 'entity' || shooter === '_entity') ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' } : parseExpressionToAST(shooter, seq * 10 + 4) },
+      ],
+    };
+  }
+
+  // Damage Source from type: new DamageSource(world.holderOrThrow(DamageTypes.THORNS)) -> damagesource_from_type
+  if (expr.includes('DamageSource') || expr.includes('DamageTypes.') || expr.includes('holderOrThrow')) {
+    const typeMatch = expr.match(/(?:DamageTypes\.|ResourceLocation\.parse\(["'](?:minecraft:)?)([a-zA-Z0-9_]+)["']?\)?/);
+    const rawType = typeMatch ? typeMatch[1] : 'GENERIC';
+    const cleanType = rawType.replace(/_([a-z])/g, (_, l) => l.toUpperCase());
+    const formattedType = cleanType.charAt(0).toUpperCase() + cleanType.slice(1).toLowerCase();
+
+    return {
+      id: `ds_${seq}`,
+      type: 'damagesource_from_type',
+      category: 'damage',
+      title: `Damage source of type: ${formattedType}`,
+      fields: { damagetype: rawType.toLowerCase() },
+    };
+  }
+
+  // Waterloggable block: block_is_waterloggable
+  if (expr.includes('instanceof SimpleWaterloggedBlock')) {
+    const blockMatch = expr.match(/^([^\s]+)\s+instanceof\s+SimpleWaterloggedBlock/);
+    const blockExpr = blockMatch ? blockMatch[1].trim() : 'block';
+    return {
+      id: `waterlog_${seq}`,
+      type: 'block_is_waterloggable',
+      category: 'block',
+      title: 'Is waterloggable',
+      values: [{ name: 'block', block: parseExpressionToAST(blockExpr, seq * 10 + 1) }],
+    };
+  }
+
+  // Entity in water / underwater / bubble column checks
+  if (expr.includes('.isInWaterRainOrBubble()')) {
+    const entMatch = expr.match(/^([a-zA-Z0-9_.]+)\.isInWaterRainOrBubble\(\)/);
+    const rawEnt = entMatch ? entMatch[1].trim() : 'entity';
+    const targetAST: BlockASTNode = (rawEnt === 'entity' || rawEnt === '_ent')
+      ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
+      : parseExpressionToAST(rawEnt, seq * 10 + 1);
+    return {
+      id: `water_rain_bub_${seq}`,
+      type: 'entity_isinwaterrain_orbubblecolumn',
+      category: 'entity',
+      title: 'Is in water, rain, or bubble column',
+      values: [{ name: 'entity', block: targetAST }],
+    };
+  }
+
+  if (expr.includes('.isInWaterOrBubble()')) {
+    const entMatch = expr.match(/^([a-zA-Z0-9_.]+)\.isInWaterOrBubble\(\)/);
+    const rawEnt = entMatch ? entMatch[1].trim() : 'entity';
+    const targetAST: BlockASTNode = (rawEnt === 'entity' || rawEnt === '_ent')
+      ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
+      : parseExpressionToAST(rawEnt, seq * 10 + 1);
+    return {
+      id: `water_bub_${seq}`,
+      type: 'entity_isinwater_orbubblecolumn',
+      category: 'entity',
+      title: 'Is in water or bubble column',
+      values: [{ name: 'entity', block: targetAST }],
+    };
+  }
+
+  if (expr.includes('.isInWater()')) {
+    const entMatch = expr.match(/^([a-zA-Z0-9_.]+)\.isInWater\(\)/);
+    const rawEnt = entMatch ? entMatch[1].trim() : 'entity';
+    const targetAST: BlockASTNode = (rawEnt === 'entity' || rawEnt === '_ent')
+      ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
+      : parseExpressionToAST(rawEnt, seq * 10 + 1);
+    return {
+      id: `isinwater_${seq}`,
+      type: 'entity_isinwater',
+      category: 'entity',
+      title: 'Is in water',
+      values: [{ name: 'entity', block: targetAST }],
+    };
+  }
+
+  if (expr.includes('.isUnderWater()')) {
+    const entMatch = expr.match(/^([a-zA-Z0-9_.]+)\.isUnderWater\(\)/);
+    const rawEnt = entMatch ? entMatch[1].trim() : 'entity';
+    const targetAST: BlockASTNode = (rawEnt === 'entity' || rawEnt === '_ent')
+      ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
+      : parseExpressionToAST(rawEnt, seq * 10 + 1);
+    return {
+      id: `underwater_${seq}`,
+      type: 'entity_is_underwater',
+      category: 'entity',
+      title: 'Is underwater',
+      values: [{ name: 'entity', block: targetAST }],
+    };
+  }
+
+  // Entity set on fire: entity_set_on_fire
+  if (expr.includes('.setTicks(1') || expr.includes('.setSeconds(') || expr.includes('.setFire(')) {
+    const secMatch = expr.match(/(?:setSeconds|setTicks|setFire)\s*\(\s*([^)]+)\s*\)/);
+    const secExpr = secMatch ? secMatch[1].trim() : '15';
+    const entMatch = expr.match(/^([a-zA-Z0-9_.]+)\./);
+    const rawEnt = entMatch ? entMatch[1].trim() : 'entity';
+    const targetAST: BlockASTNode = (rawEnt === 'entity' || rawEnt === '_ent')
+      ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
+      : parseExpressionToAST(rawEnt, seq * 10 + 1);
+    return {
+      id: `set_fire_${seq}`,
+      type: 'entity_set_on_fire',
+      category: 'entity',
+      title: 'Set on fire for seconds',
+      values: [
+        { name: 'seconds', block: parseExpressionToAST(secExpr, seq * 10 + 2) },
+        { name: 'entity', block: targetAST },
+      ],
+    };
+  }
+
+  // Entity remaining fire ticks: entity_get_fire_ticks
+  if (expr.includes('.getRemainingFireTicks()') || expr.includes('.getFireTicks()')) {
+    const entMatch = expr.match(/^([a-zA-Z0-9_.]+)\./);
+    const rawEnt = entMatch ? entMatch[1].trim() : 'entity';
+    const targetAST: BlockASTNode = (rawEnt === 'entity' || rawEnt === '_ent')
+      ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
+      : parseExpressionToAST(rawEnt, seq * 10 + 1);
+    return {
+      id: `fire_ticks_${seq}`,
+      type: 'entity_get_fire_ticks',
+      category: 'entity',
+      title: 'Get remaining ticks on fire of',
+      values: [{ name: 'entity', block: targetAST }],
+    };
+  }
+
+  // Entity fire immunity: entity_isimmunetofire
+  if (expr.includes('.fireImmune()') || expr.includes('.isFireImmune()')) {
+    const entMatch = expr.match(/^([a-zA-Z0-9_.]+)\./);
+    const rawEnt = entMatch ? entMatch[1].trim() : 'entity';
+    const targetAST: BlockASTNode = (rawEnt === 'entity' || rawEnt === '_ent')
+      ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
+      : parseExpressionToAST(rawEnt, seq * 10 + 1);
+    return {
+      id: `fire_imm_${seq}`,
+      type: 'entity_isimmunetofire',
+      category: 'entity',
+      title: 'Is immune to fire',
+      values: [{ name: 'entity', block: targetAST }],
+    };
+  }
+
+  // Team friendly fire: team_get_friendlyfire
+  if (expr.includes('getAllowFriendlyFire()') || expr.includes('isAllowFriendlyFire()')) {
+    const teamMatch = expr.match(/(?:getTeam\s*\([^)]+\)|getScoreboard\s*\([^)]+\)\.getPlayerTeam\s*\([^)]+\)|scoreboard\.getPlayerTeam\s*\([^)]+\)|getTeams\s*\([^)]+\)|Team\s+[^=]+=)\s*([^,]+)/);
+    const teamExpr = teamMatch ? teamMatch[1].trim() : '"team_name"';
+    return {
+      id: `team_ff_${seq}`,
+      type: 'team_get_friendlyfire',
+      category: 'world',
+      title: 'Is friendly fire for team with name enabled',
+      values: [{ name: 'name', block: parseExpressionToAST(teamExpr, seq * 10 + 1) }],
+    };
+  }
+
   // Null Entity Literal: (Entity) null, (LivingEntity) null, null_entity
   if (expr === 'null' || expr === '(Entity) null' || expr === '(LivingEntity) null' || expr === '(Player) null') {
     return {
@@ -5877,15 +6173,30 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
 
   // METHOD CHAIN: getBlockState(...)
   if (expr.includes('.getBlockState(')) {
+    let xArg = 'x', yArg = 'y', zArg = 'z';
+    const posMatch = expr.match(/BlockPos\.containing\s*\(([^,]+),\s*([^,]+),\s*([^)]+)\)/);
+    if (posMatch) {
+      xArg = posMatch[1].trim();
+      yArg = posMatch[2].trim();
+      zArg = posMatch[3].trim();
+    } else {
+      const pMatch = expr.match(/getBlockState\s*\(([^)]+)\)/);
+      if (pMatch) {
+        // if passed a BlockPos variable or expression
+        xArg = pMatch[1].trim() + '.getX()';
+        yArg = pMatch[1].trim() + '.getY()';
+        zArg = pMatch[1].trim() + '.getZ()';
+      }
+    }
     return {
       id: `get_block_${seq}`,
       type: 'world_get_block',
       category: 'world',
       title: 'Get block at',
       values: [
-        { name: 'x', block: { id: `x_${seq}`, type: 'coord_x', category: 'world', title: 'x' } },
-        { name: 'y', block: { id: `y_${seq}`, type: 'coord_y', category: 'world', title: 'y' } },
-        { name: 'z', block: { id: `z_${seq}`, type: 'coord_z', category: 'world', title: 'z' } },
+        { name: 'x', block: parseExpressionToAST(xArg, seq * 10 + 1) },
+        { name: 'y', block: parseExpressionToAST(yArg, seq * 10 + 2) },
+        { name: 'z', block: parseExpressionToAST(zArg, seq * 10 + 3) },
       ],
     };
   }
