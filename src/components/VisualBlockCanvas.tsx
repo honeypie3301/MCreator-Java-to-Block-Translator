@@ -625,16 +625,41 @@ const getBlockTheme = (node: BlockASTNode) => {
   if (node.type === 'call_procedure_any') {
     return MCREATOR_CATEGORY_THEMES.command_action_any;
   }
-  if (node.category === 'feature_blocks' || node.type.startsWith('blockstate_') || node.type === 'block_tag' || node.type === 'block_list') {
+  if (node.category === 'feature_ore' || node.type.startsWith('feature_ore') || node.type === 'feature_scattered_ore' || node.type === 'feature_single_block_ore') {
+    return MCREATOR_CATEGORY_THEMES.feature_ore;
+  }
+  if (node.category === 'feature_tree' || node.type.startsWith('feature_tree')) {
+    return MCREATOR_CATEGORY_THEMES.feature_tree;
+  }
+  if (
+    node.category === 'feature_advanced' ||
+    ['feature_custom_structure', 'feature_root_system', 'feature_vegetation_patch', 'feature_waterlogged_vegetation_patch', 'feature_disk', 'feature_block_column', 'feature_random_selector', 'feature_configured_placement', 'feature_patch'].includes(node.type)
+  ) {
+    return MCREATOR_CATEGORY_THEMES.feature_advanced;
+  }
+  if (
+    node.category === 'feature_misc' ||
+    ['feature_geode_simple', 'feature_lake', 'feature_delta', 'feature_spring', 'feature_bamboo', 'feature_seagrass', 'feature_coral_claw', 'feature_coral_mushroom', 'feature_coral_tree', 'feature_huge_brown_mushroom', 'feature_huge_red_mushroom', 'feature_huge_fungus', 'feature_forest_rock', 'feature_underwater_magma', 'feature_block_pile', 'feature_patch_simple', 'feature_replace_sphere', 'feature_blob', 'feature_simple_block', 'feature_empty', 'feature_no_op'].includes(node.type)
+  ) {
+    return MCREATOR_CATEGORY_THEMES.feature_misc;
+  }
+  if (node.category === 'feature_blocks' || node.type.startsWith('blockstate_') || node.type === 'block_tag' || node.type === 'block_list' || node.type === 'ore_target' || node.type === 'disk_rule' || node.type === 'block_column_layer') {
     return MCREATOR_CATEGORY_THEMES.feature_blocks;
   }
   if (node.category === 'feature_int_provider' || node.type.startsWith('int_provider_')) {
     return MCREATOR_CATEGORY_THEMES.feature_int_provider;
   }
-  if (node.category === 'feature_placement_common' || node.type.startsWith('placement_common') || node.type.startsWith('placement_')) {
-    if (node.type.includes('height')) return MCREATOR_CATEGORY_THEMES.feature_placement_height;
-    if (node.type.includes('conditional') || node.type.includes('filter')) return MCREATOR_CATEGORY_THEMES.feature_placement_conditional;
+  if (node.category === 'feature_placement_conditional' || node.type.startsWith('placement_condition') || node.type.startsWith('block_predicate_') || node.type.includes('conditional') || node.type.includes('filter')) {
+    return MCREATOR_CATEGORY_THEMES.feature_placement_conditional;
+  }
+  if (node.category === 'feature_placement_height' || node.type.includes('height')) {
+    return MCREATOR_CATEGORY_THEMES.feature_placement_height;
+  }
+  if (node.category === 'feature_placement_common' || node.type.startsWith('placement_')) {
     return MCREATOR_CATEGORY_THEMES.feature_placement_common;
+  }
+  if (node.type.startsWith('feature_')) {
+    return MCREATOR_CATEGORY_THEMES.feature_misc;
   }
   return MCREATOR_CATEGORY_THEMES[node.category] || MCREATOR_CATEGORY_THEMES.control;
 };
