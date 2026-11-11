@@ -3653,6 +3653,28 @@ const InlineValueBlock: React.FC<{
     );
   }
 
+  // Burning / on fire block: Is [Event/target entity] burning (entity_isburning)
+  if (node.type === 'entity_isburning' || node.type === 'entity_is_onfire') {
+    const targetBlock = node.values?.find(v => v.name === 'entity')?.block;
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); }}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: '#5b80a5', borderColor: '#486887' }}
+      >
+        <span className="font-bold text-[11px]">Is</span>
+        {targetBlock ? (
+          <InlineValueBlock node={targetBlock} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+        ) : (
+          <span className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-[#498671] text-[10.5px]">
+            Event/target entity
+          </span>
+        )}
+        <span className="font-bold text-[11px]">burning</span>
+      </div>
+    );
+  }
+
   // Fire & Team Scoreboard blocks
   if (
     node.type === 'entity_get_fire_ticks' ||

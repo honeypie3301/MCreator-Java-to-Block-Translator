@@ -67,7 +67,10 @@ export function CustomDropdown<T extends string = string>({
       >
         {icon && <span className="shrink-0">{icon}</span>}
         {prefix && <span className="text-[10px] font-mono text-[#A39B8E]">{prefix}</span>}
-        <span className={`font-semibold ${mono ? 'font-mono text-[#CEB098]' : 'text-[#FAF6F0]'}`}>
+        <span
+          className={`font-semibold truncate max-w-[130px] sm:max-w-[200px] md:max-w-[280px] ${mono ? 'font-mono text-[#CEB098]' : 'text-[#FAF6F0]'}`}
+          title={selectedOption ? selectedOption.label : value}
+        >
           {selectedOption ? selectedOption.label : value}
         </span>
         <ChevronDown
@@ -82,7 +85,7 @@ export function CustomDropdown<T extends string = string>({
           role="listbox"
           className={`absolute mt-1.5 ${
             align === 'right' ? 'right-0' : 'left-0'
-          } z-50 min-w-[170px] bg-[#1A1816] border border-[#423A33] rounded-lg shadow-2xl p-1 text-xs backdrop-blur-md`}
+          } z-50 min-w-[180px] max-w-[340px] max-h-[320px] overflow-y-auto bg-[#1A1816] border border-[#423A33] rounded-lg shadow-2xl p-1 text-xs backdrop-blur-md`}
         >
           {options.map((option) => {
             const isSelected = option.value === value;

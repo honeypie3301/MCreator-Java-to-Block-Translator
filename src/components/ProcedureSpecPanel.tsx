@@ -25,27 +25,29 @@ export const ProcedureSpecPanel: React.FC<ProcedureSpecPanelProps> = ({ result }
             <span>Element Specification</span>
           </div>
           <div className="space-y-1.5 text-xs">
-            <div className="flex justify-between">
-              <span className="text-[#A39B8E]">Element Name:</span>
-              <span className="text-[#FAF6F0] font-semibold">{result.procedureName}</span>
+            <div className="flex justify-between items-start gap-2 min-w-0">
+              <span className="text-[#A39B8E] shrink-0">Element Name:</span>
+              <span className="text-[#FAF6F0] font-semibold break-all text-right font-mono text-[11px] max-w-[70%] select-all" title={result.procedureName}>
+                {result.procedureName}
+              </span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center gap-2 min-w-0">
               <span className="text-[#A39B8E]">Blockly Extension:</span>
               <span className="text-[#CEB098] bg-[#24201D] px-2 py-0.5 rounded border border-[#3B342E] font-bold">
                 {result.fileExtension}
               </span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center gap-2 min-w-0">
               <span className="text-[#A39B8E]">Root Trigger Block:</span>
               <span className="text-[#CEB098] bg-[#24201D] px-2 py-0.5 rounded border border-[#3B342E]">
                 {result.eventTrigger}
               </span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center gap-2 min-w-0">
               <span className="text-[#A39B8E]">Target NeoForge Engine:</span>
               <span className="text-[#FAF6F0] font-bold">{result.targetNeoForgeVersion}</span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center gap-2 min-w-0">
               <span className="text-[#A39B8E]">Blocks Database Match:</span>
               <span className="text-[#CEB098] font-bold">{result.matchedBlocksCount} blocks</span>
             </div>

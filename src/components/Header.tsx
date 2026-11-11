@@ -33,13 +33,13 @@ export const Header: React.FC<HeaderProps> = ({
   fileExtension,
 }) => {
   return (
-    <header className="border-b border-[#2A2622] bg-[#161412] px-3 py-1.5 flex flex-wrap items-center justify-between gap-2 sticky top-0 z-50 text-[#F5F2EB] text-xs">
+    <header className="border-b border-[#2A2622] bg-[#161412] px-3 py-2 flex flex-wrap items-center justify-between gap-2.5 sticky top-0 z-50 text-[#F5F2EB] text-xs min-w-0">
       {/* Brand Title - Compact */}
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center space-x-2 shrink-0">
         <div className="p-1 rounded bg-[#2A241F] border border-[#52463C] text-[#E8D8C8] flex items-center justify-center shadow-inner shrink-0">
           <Blocks className="w-4 h-4 text-[#CEB098]" />
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 shrink-0">
           <h1 className="text-xs font-bold tracking-tight text-[#FAF6F0]">
             MCreator Block Translator
           </h1>
@@ -50,7 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Selectors & Actions - Compact */}
-      <div className="flex items-center flex-wrap gap-1.5 text-xs">
+      <div className="flex items-center flex-wrap gap-2 text-xs min-w-0 justify-end">
         {/* Element Type Selector */}
         <CustomDropdown<MCreatorElementType>
           value={elementType}

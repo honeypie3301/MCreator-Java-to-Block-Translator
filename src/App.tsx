@@ -219,10 +219,10 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Grid View - Compact Layout */}
-      <main className="flex-1 p-1.5 sm:p-2 grid grid-cols-1 lg:grid-cols-12 gap-2 max-w-[1920px] w-full mx-auto overflow-hidden">
+      {/* Main Grid View - Responsive Layout */}
+      <main className="flex-1 p-1.5 sm:p-2.5 grid grid-cols-1 lg:grid-cols-12 gap-2.5 max-w-[1920px] w-full mx-auto min-h-0 lg:h-[calc(100vh-3.2rem)]">
         {/* Left Column: Java Code Editor */}
-        <div className="lg:col-span-5 h-[calc(100vh-2.8rem)] min-h-[450px]">
+        <div className="lg:col-span-5 flex flex-col h-[520px] lg:h-full min-h-[380px]">
           <JavaEditorPanel
             code={code}
             onChangeCode={(newCode) => {
@@ -237,10 +237,10 @@ export default function App() {
         </div>
 
         {/* Right Column: MCreator Block Translation Canvas */}
-        <div className="lg:col-span-7 h-[calc(100vh-2.8rem)] min-h-[450px] flex flex-col bg-[#181614] border border-[#2E2925] rounded-lg overflow-hidden shadow-sm">
-          {/* Navigation Tabs - Compact */}
-          <div className="bg-[#121110] border-b border-[#2E2925] px-2.5 py-1.5 flex items-center justify-between flex-wrap gap-1.5 text-xs">
-            <div className="flex items-center space-x-1">
+        <div className="lg:col-span-7 flex flex-col h-[560px] lg:h-full min-h-[420px] bg-[#181614] border border-[#2E2925] rounded-lg overflow-hidden shadow-sm">
+          {/* Navigation Tabs - Compact & Responsive */}
+          <div className="bg-[#121110] border-b border-[#2E2925] px-2.5 py-1.5 flex items-center justify-between flex-wrap gap-2 text-xs min-w-0">
+            <div className="flex items-center gap-1 overflow-x-auto min-w-0 flex-1 scrollbar-none py-0.5">
               <button
                 onClick={() => setActiveTab('visual')}
                 className={`px-3 py-1.5 rounded-md font-medium transition flex items-center space-x-1.5 cursor-pointer ${
@@ -291,7 +291,7 @@ export default function App() {
             </div>
 
             {result && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0 min-w-0 ml-auto">
                 {result.detectedMethods && result.detectedMethods.length > 1 && (
                   <CustomDropdown
                     value={result.activeMethodName || result.detectedMethods[0]?.signature}
@@ -315,7 +315,10 @@ export default function App() {
                     })}
                   />
                 )}
-                <span className="text-[11px] font-mono text-[#CEB098] bg-[#24201D] px-2.5 py-0.5 rounded border border-[#3B342E]">
+                <span
+                  className="text-[11px] font-mono text-[#CEB098] bg-[#24201D] px-2.5 py-0.5 rounded border border-[#3B342E] truncate max-w-[180px] sm:max-w-[260px] md:max-w-[340px] shrink min-w-0 shadow-xs"
+                  title={`${result.procedureName}${result.fileExtension}`}
+                >
                   {result.procedureName}{result.fileExtension}
                 </span>
               </div>

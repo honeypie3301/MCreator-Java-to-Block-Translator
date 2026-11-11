@@ -6350,13 +6350,13 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
       values: [{ name: 'entity', block: entityDepBlock(rawEntity) }],
     };
   }
-  if (expr.includes('.isOnFire()')) {
-    const rawEntity = expr.replace('.isOnFire()', '').trim();
+  if (expr.includes('.isOnFire()') || expr.includes('.isBurning()')) {
+    const rawEntity = expr.replace(/\.(isOnFire|isBurning)\(\)/g, '').trim();
     return {
-      id: `on_fire_${seq}`,
-      type: 'entity_is_onfire',
+      id: `is_burning_${seq}`,
+      type: 'entity_isburning',
       category: 'entity',
-      title: 'Is entity on fire',
+      title: 'Is entity burning',
       values: [{ name: 'entity', block: entityDepBlock(rawEntity) }],
     };
   }

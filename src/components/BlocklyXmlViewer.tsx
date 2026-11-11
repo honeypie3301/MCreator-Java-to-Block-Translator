@@ -23,32 +23,37 @@ export const BlocklyXmlViewer: React.FC<BlocklyXmlViewerProps> = ({
   return (
     <div className="flex flex-col h-full bg-[#181614] border border-[#2E2925] rounded-lg overflow-hidden font-mono text-xs shadow-sm">
       {/* Bar */}
-      <div className="bg-[#121110] px-3 py-2 border-b border-[#2E2925] flex items-center justify-between text-xs">
-        <div className="flex items-center space-x-2">
-          <FileCode className="w-4 h-4 text-[#CEB098]" />
-          <span className="font-semibold text-[#FAF6F0]">
-            MCreator 2026.1 Blockly XML ({fileExtension})
+      <div className="bg-[#121110] px-3 py-2 border-b border-[#2E2925] flex items-center justify-between gap-3 min-w-0 flex-wrap sm:flex-nowrap text-xs">
+        <div className="flex items-center gap-2 min-w-0 overflow-hidden flex-1">
+          <FileCode className="w-4 h-4 text-[#CEB098] shrink-0" />
+          <span className="font-semibold text-[#FAF6F0] shrink-0 hidden sm:inline whitespace-nowrap">
+            MCreator 2026.1 Blockly XML
           </span>
-          <span className="text-[10px] bg-[#24201D] text-[#CEB098] px-2 py-0.5 rounded border border-[#3B342E]">
-            {procedureName || 'Element'}{fileExtension}
+          <span
+            className="text-[10px] bg-[#24201D] text-[#CEB098] px-2.5 py-0.5 rounded border border-[#3B342E] truncate max-w-[200px] sm:max-w-[320px] md:max-w-[480px] shrink min-w-0 font-mono shadow-xs"
+            title={`${procedureName || "Element"}${fileExtension}`}
+          >
+            {procedureName || "Element"}{fileExtension}
           </span>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-2 shrink-0 ml-auto">
           <button
             onClick={onCopyXml}
-            className="px-2.5 py-1 bg-[#24201D] hover:bg-[#2E2925] text-[#FAF6F0] border border-[#3B342E] rounded transition flex items-center space-x-1"
+            className="px-2.5 py-1 bg-[#24201D] hover:bg-[#2E2925] text-[#FAF6F0] border border-[#3B342E] rounded transition flex items-center gap-1.5 shrink-0 cursor-pointer shadow-xs"
+            title="Copy MCreator Blockly XML to clipboard"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-[#CEB098]" /> : <Copy className="w-3.5 h-3.5" />}
-            <span>{copied ? 'Copied' : 'Copy XML'}</span>
+            <span className="whitespace-nowrap">{copied ? "Copied" : "Copy XML"}</span>
           </button>
 
           <button
             onClick={onExportPt}
-            className="px-2.5 py-1 bg-[#CEB098] hover:bg-[#E2D2C3] text-[#121110] font-semibold rounded transition flex items-center space-x-1"
+            className="px-2.5 py-1 bg-[#CEB098] hover:bg-[#E2D2C3] active:bg-[#B89980] text-[#121110] font-semibold rounded transition flex items-center gap-1.5 shrink-0 cursor-pointer shadow-xs"
+            title={`Download ${fileExtension} template for MCreator`}
           >
             <Download className="w-3.5 h-3.5 text-[#121110]" />
-            <span>Download {fileExtension}</span>
+            <span className="whitespace-nowrap">Download {fileExtension}</span>
           </button>
         </div>
       </div>
