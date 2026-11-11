@@ -16,6 +16,8 @@ import {
   FileText,
   Layers as LayersIcon,
   HelpCircle,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { GLOBAL_TRIGGERS } from '../lib/mcreatorConverter';
 
@@ -23,9 +25,9 @@ interface VisualBlockCanvasProps {
   ast?: BlockASTNode;
   eventTrigger?: string;
   procedureName?: string;
-  
-  
-  
+  selectedLineNumber?: number | null;
+  selectedBlockId?: string | null;
+  onSelectBlock?: (id: string, line?: number) => void;
 }
 
 // Color palette extracted directly from MCreator 2026.1 Blockly source & UI
@@ -281,14 +283,32 @@ function getNodeComplexity(node: BlockASTNode, depth = 0): { count: number; maxD
 function shouldUseExternalInputs(node: BlockASTNode, layoutMode: string = 'auto'): boolean {
   if (layoutMode === 'inline') return false;
   if (layoutMode === 'external') return true;
+  // Never force math operations or common procedural statements into external layout
+  if (
+    node.type.startsWith('math_') ||
+    node.type === 'spawn_particle_multi' ||
+    node.type === 'spawn_particle' ||
+    node.type === 'play_sound' ||
+    node.type.startsWith('entity_add_potion') ||
+    node.type === 'entity_despawn'
+  ) {
+    return false;
+  }
   // Auto mode: check values count and depth
   if (!node.values || node.values.length === 0) return false;
-  if (node.values.length >= 3) return true;
+  if (node.values.length > 5) return true;
   const complexity = getNodeComplexity(node);
-  return complexity.maxDepth >= 2 || complexity.textLen > 35 || complexity.count >= 4;
+  return complexity.maxDepth >= 3 || complexity.textLen > 60 || complexity.count >= 7;
 }
 
-function checkIsNodeSelected(): boolean {
+function checkIsNodeSelected(
+  node?: BlockASTNode,
+  selectedLineNumber?: number | null,
+  selectedBlockId?: string | null
+): boolean {
+  if (!node) return false;
+  if (selectedBlockId && node.id === selectedBlockId) return true;
+  if (selectedLineNumber && node.sourceLine === selectedLineNumber) return true;
   return false;
 }
 
@@ -322,6 +342,8 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
   const [inputLayoutMode, setInputLayoutMode] = useState<'auto' | 'inline' | 'external'>('auto');
   const [showSnippetGuide, setShowSnippetGuide] = useState<boolean>(false);
 
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
   if (!ast) {
     return (
       <div className="flex flex-col items-center justify-center h-80 bg-[#161920] rounded-lg border border-[#2b303c] text-[#8C857B] font-mono text-xs space-y-3">
@@ -335,7 +357,9 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#181a20] rounded-lg border border-[#2d323e] shadow-lg overflow-hidden font-sans text-xs">
+    <div className={`flex flex-col bg-[#181a20] rounded-lg border border-[#2d323e] shadow-lg overflow-hidden font-sans text-xs transition-all ${
+      isFullscreen ? 'fixed inset-3 z-50 shadow-2xl border-amber-500/50 bg-[#181a20]' : 'h-full'
+    }`}>
       {/* MCreator Blockly Top Bar */}
       <div className="bg-[#1e222b] px-3 py-2 border-b border-[#2d323e] flex items-center justify-between gap-3 flex-wrap">
         {/* Left: Procedure Name & Search */}
@@ -437,7 +461,7 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
             </button>
           </div>
 
-          {/* Zoom Buttons */}
+          {/* Zoom Buttons & Fullscreen */}
           <div className="flex items-center bg-[#14171d] px-1.5 py-0.5 rounded border border-[#2e3440] text-[11px] text-[#7e889b]">
             <button
               onClick={() => setZoomLevel((z) => Math.max(40, z - 10))}
@@ -462,6 +486,13 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
               title="Reset Zoom"
             >
               <RotateCcw className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className="p-0.5 hover:text-amber-300 transition ml-1.5 cursor-pointer flex items-center justify-center"
+              title={isFullscreen ? "Exit Fullscreen" : "Fullscreen Blockly Window"}
+            >
+              {isFullscreen ? <Minimize2 className="w-3.5 h-3.5 text-amber-400" /> : <Maximize2 className="w-3.5 h-3.5 text-amber-400" />}
             </button>
           </div>
         </div>
@@ -590,9 +621,9 @@ const BlocklyNodeRenderer: React.FC<{
   node: BlockASTNode;
   eventTrigger?: string;
   inputLayoutMode?: 'auto' | 'inline' | 'external';
-  
-  
-  
+  selectedLineNumber?: number | null;
+  selectedBlockId?: string | null;
+  onSelectBlock?: (id: string, line?: number) => void;
 }> = React.memo(({ node, eventTrigger, inputLayoutMode = 'auto', selectedLineNumber, selectedBlockId, onSelectBlock }) => {
   const theme = MCREATOR_CATEGORY_THEMES[node.category] || MCREATOR_CATEGORY_THEMES.control;
   const isSelected = checkIsNodeSelected(node, selectedLineNumber, selectedBlockId);
@@ -890,7 +921,7 @@ const BlocklyNodeRenderer: React.FC<{
                   </div>
 
                   {/* Indented Statement Cavity */}
-                  <div className="flex-1 p-1 bg-black/20 border-t border-b border-r border-black/30 min-h-[36px] rounded-r-md my-0.5">
+                  <div className="flex-1 p-0.5 min-h-[32px] my-0.5">
                     {s.block ? (
                       <BlocklyNodeRenderer
                         node={s.block}
@@ -914,7 +945,7 @@ const BlocklyNodeRenderer: React.FC<{
             >
               do
             </div>
-            <div className="flex-1 p-1 bg-black/20 border-t border-b border-r border-black/30 min-h-[36px] rounded-r-md my-0.5">
+            <div className="flex-1 p-0.5 min-h-[32px] my-0.5">
               <span className="text-white/40 text-[10px] italic p-0.5">🧩 &lt;statement body&gt;</span>
             </div>
           </div>
@@ -944,13 +975,8 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.5 Specialized Variable Setter Block (Set number [Local: var] to: [val])
-  if (
-    node.type === 'variables_set_number' ||
-    node.type === 'variables_set_logic' ||
-    node.type === 'variables_set_string' ||
-    node.type === 'variables_set_itemstack'
-  ) {
+  // 2.5 Specialized Variable Setter Block (Set {type} [Local/Global: var] to: [val])
+  if (node.type.startsWith('variables_set_')) {
     const valBlock = node.values?.find(v => v.name === 'VAL')?.block;
     const entityBlock = node.values?.find(v => v.name === 'entity')?.block;
     const typeLabel = node.type.replace('variables_set_', '');
@@ -1194,7 +1220,7 @@ const BlocklyNodeRenderer: React.FC<{
     const itemBlock = node.values?.find(v => v.name === 'item' || v.name === 'itemstack')?.block;
     const fromItemBlock = node.values?.find(v => v.name === 'fromItem')?.block;
     const toItemBlock = node.values?.find(v => v.name === 'toItem')?.block;
-    const tagHolderBlock = node.values?.find(v => v.name === 'tag' && v.name !== 'tagName')?.block;
+    const tagHolderBlock = node.values?.find(v => v.name === 'tag')?.block;
     const childTagBlock = node.values?.find(v => v.name === 'childTag')?.block;
     const xVal = node.values?.find(v => v.name === 'x')?.block;
     const yVal = node.values?.find(v => v.name === 'y')?.block;
@@ -1588,6 +1614,454 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
+  // 2.6.5.5 ENTITY SEND CHAT: Send message [text] to [entity] show in action bar: [actbar]
+  if (node.type === 'entity_send_chat') {
+    const textBlock = node.values?.find(v => v.name === 'text')?.block;
+    const actbarBlock = node.values?.find(v => v.name === 'actbar')?.block;
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    const isActTrue = actbarBlock?.fields?.BOOL === 'TRUE' || actbarBlock?.title === 'TRUE';
+
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className="flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all"
+      >
+        <div
+          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap min-w-[320px]"
+          style={{ backgroundColor: '#00acc1', borderColor: '#00838f' }}
+        >
+          <span className="font-bold text-[11px]">Send message</span>
+          {textBlock && (
+            <InlineValueBlock
+              node={textBlock}
+              inputLayoutMode={inputLayoutMode}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          <span className="font-bold text-[11px]">to</span>
+          {entBlock ? (
+            <InlineValueBlock
+              node={entBlock}
+              inputLayoutMode={inputLayoutMode}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          ) : (
+            <div className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-white/20 text-[10.5px]">
+              Event/target entity
+            </div>
+          )}
+          <span className="font-bold text-[11px]">show in action bar:</span>
+          <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+            {isActTrue ? 'true' : 'false'} <ChevronDown className="w-3 h-3 opacity-70" />
+          </span>
+          <FileText className="w-3.5 h-3.5 ml-auto text-white/80" />
+        </div>
+
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer
+              node={node.next}
+              inputLayoutMode={inputLayoutMode}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 2.6.5.6 ENTITY SWITCH DIMENSION: Switch dimension of [entity] to [dimension]
+  if (node.type === 'entity_switch_dimension') {
+    const rawDim = node.fields?.dimension || 'CUSTOM:TheGrain';
+    const dimDisplay = rawDim.replace(/^CUSTOM:/, '');
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className="flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all"
+      >
+        <div
+          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap min-w-[280px]"
+          style={{ backgroundColor: '#00acc1', borderColor: '#00838f' }}
+        >
+          <span className="font-bold text-[11px]">Switch dimension of</span>
+          {entBlock ? (
+            <InlineValueBlock
+              node={entBlock}
+              inputLayoutMode={inputLayoutMode}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          ) : (
+            <div className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-white/20 text-[10.5px]">
+              Event/target entity
+            </div>
+          )}
+          <span className="font-bold text-[11px]">to</span>
+          <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+            {dimDisplay} <ChevronDown className="w-3 h-3 opacity-70" />
+          </span>
+          <FileText className="w-3.5 h-3.5 ml-auto text-white/80" />
+        </div>
+
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer
+              node={node.next}
+              inputLayoutMode={inputLayoutMode}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 2.6.5.7 ENTITY NBT SETTERS: Set [entity] custom {number/logic/text} NBT tag [tagName] to [tagValue]
+  if (
+    node.type === 'entity_nbt_num_set' ||
+    node.type === 'entity_nbt_logic_set' ||
+    node.type === 'entity_nbt_text_set'
+  ) {
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    const tagBlock = node.values?.find(v => v.name === 'tagName')?.block;
+    const valBlock = node.values?.find(v => v.name === 'tagValue' || v.name === 'value')?.block;
+    const typeLabel = node.type.includes('_num_') ? 'number' : node.type.includes('_logic_') ? 'logic' : 'text';
+
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className="flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all"
+      >
+        <div
+          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap min-w-[320px]"
+          style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
+        >
+          <span className="font-bold text-[11px]">Set</span>
+          {entBlock ? (
+            <InlineValueBlock
+              node={entBlock}
+              inputLayoutMode={inputLayoutMode}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          ) : (
+            <div className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-white/20 text-[10.5px]">
+              Event/target entity
+            </div>
+          )}
+          <span className="font-bold text-[11px]">custom {typeLabel} NBT tag</span>
+          {tagBlock && (
+            <InlineValueBlock
+              node={tagBlock}
+              inputLayoutMode={inputLayoutMode}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          <span className="font-bold text-[11px]">to</span>
+          {valBlock && (
+            <InlineValueBlock
+              node={valBlock}
+              inputLayoutMode={inputLayoutMode}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          <FileText className="w-3.5 h-3.5 ml-auto text-white/80" />
+        </div>
+
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer
+              node={node.next}
+              inputLayoutMode={inputLayoutMode}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 2.6.6 ENTITY DESPAWN: Despawn [ Event/target entity ]
+  if (node.type === 'entity_despawn') {
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className="flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all"
+      >
+        <div
+          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap min-w-[200px]"
+          style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
+        >
+          <span className="font-bold text-[11px]">Despawn</span>
+          {entBlock ? (
+            <InlineValueBlock
+              node={entBlock}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          ) : (
+            <div className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-white/20 text-[10.5px]">
+              Event/target entity
+            </div>
+          )}
+          <FileText className="w-3.5 h-3.5 ml-auto text-white/80" />
+        </div>
+
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer
+              node={node.next}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 2.6.7 SPAWN PARTICLE MULTI
+  if (node.type === 'spawn_particle_multi') {
+    const countBlock = node.values?.find(v => v.name === 'count')?.block;
+    const xBlock = node.values?.find(v => v.name === 'x')?.block;
+    const yBlock = node.values?.find(v => v.name === 'y')?.block;
+    const zBlock = node.values?.find(v => v.name === 'z')?.block;
+    const dxBlock = node.values?.find(v => v.name === 'dx')?.block;
+    const dyBlock = node.values?.find(v => v.name === 'dy')?.block;
+    const dzBlock = node.values?.find(v => v.name === 'dz')?.block;
+    const speedBlock = node.values?.find(v => v.name === 'speed')?.block;
+    const particleType = node.fields?.particle || 'Campfire Cosy Smoke';
+
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className="flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all"
+      >
+        <div
+          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap min-w-[320px]"
+          style={{ backgroundColor: '#a58c5b', borderColor: '#877248' }}
+        >
+          <span className="font-bold text-[11px]">Spawn</span>
+          {countBlock && (
+            <InlineValueBlock
+              node={countBlock}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          <span className="font-bold text-[11px]">server-side particles at x:</span>
+          {xBlock && (
+            <InlineValueBlock
+              node={xBlock}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          <span className="font-bold text-[11px]">y:</span>
+          {yBlock && (
+            <InlineValueBlock
+              node={yBlock}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          <span className="font-bold text-[11px]">z:</span>
+          {zBlock && (
+            <InlineValueBlock
+              node={zBlock}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          <span className="font-bold text-[11px]">in area dx:</span>
+          {dxBlock && (
+            <InlineValueBlock
+              node={dxBlock}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          <span className="font-bold text-[11px]">dy:</span>
+          {dyBlock && (
+            <InlineValueBlock
+              node={dyBlock}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          <span className="font-bold text-[11px]">dz:</span>
+          {dzBlock && (
+            <InlineValueBlock
+              node={dzBlock}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          <span className="font-bold text-[11px]">with speed</span>
+          {speedBlock && (
+            <InlineValueBlock
+              node={speedBlock}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          <span className="font-bold text-[11px]">type:</span>
+          <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+            {particleType}
+          </span>
+          <FileText className="w-3.5 h-3.5 ml-auto text-white/80" />
+        </div>
+
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer
+              node={node.next}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 2.6.7.5 PLAY SOUND
+  if (node.type === 'play_sound') {
+    const rawSound = node.fields?.sound || 'sound';
+    const soundDisplay = rawSound.replace(/^CUSTOM:/, '');
+    const category = node.fields?.soundcategory || 'ambient';
+    const xBlock = node.values?.find(v => v.name === 'x')?.block;
+    const yBlock = node.values?.find(v => v.name === 'y')?.block;
+    const zBlock = node.values?.find(v => v.name === 'z')?.block;
+    const levelBlock = node.values?.find(v => v.name === 'level')?.block;
+    const pitchBlock = node.values?.find(v => v.name === 'pitch')?.block;
+
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className="flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all"
+      >
+        <div
+          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap min-w-[320px]"
+          style={{ backgroundColor: '#a58c5b', borderColor: '#877248' }}
+        >
+          <span className="font-bold text-[11px]">Play sound</span>
+          <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+            {soundDisplay}
+          </span>
+          <span className="font-bold text-[11px]">at x:</span>
+          {xBlock && (
+            <InlineValueBlock
+              node={xBlock}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          <span className="font-bold text-[11px]">y:</span>
+          {yBlock && (
+            <InlineValueBlock
+              node={yBlock}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          <span className="font-bold text-[11px]">z:</span>
+          {zBlock && (
+            <InlineValueBlock
+              node={zBlock}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          <span className="font-bold text-[11px]">level:</span>
+          {levelBlock && (
+            <InlineValueBlock
+              node={levelBlock}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          <span className="font-bold text-[11px]">pitch:</span>
+          {pitchBlock && (
+            <InlineValueBlock
+              node={pitchBlock}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          <span className="font-bold text-[11px]">category:</span>
+          <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+            {category} <ChevronDown className="w-3 h-3 opacity-70" />
+          </span>
+        </div>
+
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer
+              node={node.next}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // 2.6.8 SPAWN ENTITY (with rotation & velocity)
   if (node.type === 'spawn_entity_with_rotation_velocity' || node.type === 'spawn_entity') {
     const cleanEntName = node.fields?.entity?.replace('CUSTOM:', '') || 'CustomEntity';
@@ -1811,6 +2285,147 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
+  // 2.8.4 Action Log Block
+  if (node.type === 'action_log') {
+    const level = node.fields?.level || 'info';
+    const msgBlock = node.values?.find(v => v.name === 'message')?.block;
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className="flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all"
+      >
+        <div
+          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap min-w-[280px]"
+          style={{ backgroundColor: '#00897b', borderColor: '#004d40' }}
+        >
+          <span className="font-bold text-[11px]">Log message with level</span>
+          <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+            {level} <ChevronDown className="w-3 h-3 opacity-70" />
+          </span>
+          <span className="font-bold text-[11px]">:</span>
+          {msgBlock && (
+            <InlineValueBlock
+              node={msgBlock}
+              inputLayoutMode={inputLayoutMode}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          {node.sourceLine && (
+            <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
+              L{node.sourceLine}
+            </span>
+          )}
+        </div>
+
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer
+              node={node.next}
+              inputLayoutMode={inputLayoutMode}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 2.8.4.5 Text Print Statement Block ("print [text]")
+  if (node.type === 'text_print') {
+    const textVal = node.values?.find(v => v.name === 'TEXT')?.block;
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className="flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all"
+      >
+        <div
+          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap min-w-[180px]"
+          style={{ backgroundColor: '#00897b', borderColor: '#004d40' }}
+        >
+          <span className="font-bold text-[11px]">print</span>
+          {textVal && (
+            <InlineValueBlock
+              node={textVal}
+              inputLayoutMode={inputLayoutMode}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )}
+          {node.sourceLine && (
+            <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
+              L{node.sourceLine}
+            </span>
+          )}
+        </div>
+
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer
+              node={node.next}
+              inputLayoutMode={inputLayoutMode}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 2.8.4.6 Flow Statement Block ("break out ▾ of loop")
+  if (node.type === 'controls_flow_statements') {
+    const flowOp = node.fields?.FLOW || 'BREAK';
+    const flowText = flowOp === 'BREAK' ? 'break out' : 'continue with next iteration';
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className="flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all"
+      >
+        <div
+          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap min-w-[180px]"
+          style={{ backgroundColor: '#689f38', borderColor: '#558b2f' }}
+        >
+          <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+            {flowText} <ChevronDown className="w-3 h-3 opacity-70" />
+          </span>
+          <span className="font-bold text-[11px]">of loop</span>
+          {node.sourceLine && (
+            <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
+              L{node.sourceLine}
+            </span>
+          )}
+        </div>
+
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer
+              node={node.next}
+              inputLayoutMode={inputLayoutMode}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // 2.8.5 ENTITY ADD EXHAUSTION (Increase exhaustion of [entity] by [amount])
   if (node.type === 'entity_add_exhaustion') {
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
@@ -1856,6 +2471,111 @@ const BlocklyNodeRenderer: React.FC<{
               selectedBlockId={selectedBlockId}
               onSelectBlock={onSelectBlock}
             />
+          )}
+          {node.sourceLine && (
+            <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
+              L{node.sourceLine}
+            </span>
+          )}
+        </div>
+
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer
+              node={node.next}
+              inputLayoutMode={inputLayoutMode}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 2.8.5.5 Player & GUI & World Action Statement Blocks
+  if (
+    node.type === 'entity_remove_xp' ||
+    node.type === 'entity_set_food_level' ||
+    node.type === 'entity_set_food_saturation' ||
+    node.type === 'entity_set_gamemode' ||
+    node.type === 'entity_close_gui' ||
+    node.type === 'entity_open_gui' ||
+    node.type === 'entity_clear_inventory' ||
+    node.type === 'entity_remove_item' ||
+    node.type === 'entity_add_recipe' ||
+    node.type === 'entity_remove_recipe' ||
+    node.type.startsWith('gui_set_') ||
+    node.type.startsWith('gui_clear_') ||
+    node.type.startsWith('gui_deal_') ||
+    node.type.startsWith('gui_remove_') ||
+    node.type === 'place_portal' ||
+    node.type === 'place_feature' ||
+    node.type === 'world_send_chat' ||
+    node.type === 'world_set_weather' ||
+    node.type === 'spawn_falling_block' ||
+    node.type === 'trigger_game_event' ||
+    node.type === 'apply_bonemeal' ||
+    node.type.startsWith('shoot_projectile') ||
+    node.type.startsWith('spawn_potion') ||
+    node.type.startsWith('spawn_arrow') ||
+    node.type.startsWith('spawn_fireball') ||
+    node.type.startsWith('spawn_throwable')
+  ) {
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    const valBlock = node.values?.find(v => v.name === 'value' || v.name === 'amount' || v.name === 'xp' || v.name === 'level')?.block;
+    const itemBlock = node.values?.find(v => v.name === 'item' || v.name === 'itemstack' || v.name === 'block')?.block;
+    const xBlock = node.values?.find(v => v.name === 'x')?.block;
+    const yBlock = node.values?.find(v => v.name === 'y')?.block;
+    const zBlock = node.values?.find(v => v.name === 'z')?.block;
+    const slotBlock = node.values?.find(v => v.name === 'slot')?.block;
+
+    let themeBg = '#00acc1';
+    let themeBorder = '#00838f';
+    if (node.type.startsWith('gui_')) { themeBg = '#488b49'; themeBorder = '#275728'; }
+    else if (node.type.includes('place_') || node.type.includes('world_') || node.type.includes('spawn_') || node.type.includes('trigger_') || node.type.includes('apply_')) { themeBg = '#a58c5b'; themeBorder = '#645435'; }
+    else if (node.type.startsWith('shoot_') || node.type.startsWith('spawn_arrow') || node.type.startsWith('spawn_potion') || node.type.startsWith('spawn_fireball') || node.type.startsWith('spawn_throwable')) { themeBg = '#8a4f9e'; themeBorder = '#532661'; }
+
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className="flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all"
+      >
+        <div
+          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap min-w-[280px]"
+          style={{ backgroundColor: themeBg, borderColor: themeBorder }}
+        >
+          <span className="font-bold text-[11px]">{node.title || node.explanation || node.type.replace(/_/g, ' ')}</span>
+          {node.fields && Object.entries(node.fields).map(([k, v]) => (
+            <span key={k} className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[10.5px] flex items-center gap-1 shadow-xs">
+              {String(v)} <ChevronDown className="w-3 h-3 opacity-70" />
+            </span>
+          ))}
+          {valBlock && <InlineValueBlock node={valBlock} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          {itemBlock && <InlineValueBlock node={itemBlock} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          {slotBlock && (
+            <>
+              <span className="font-bold text-[11px]">in slot</span>
+              <InlineValueBlock node={slotBlock} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+            </>
+          )}
+          {(xBlock || yBlock || zBlock) && (
+            <span className="flex items-center gap-1 text-[11px] font-bold">
+              <span>at x:</span>{xBlock && <InlineValueBlock node={xBlock} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+              <span>y:</span>{yBlock && <InlineValueBlock node={yBlock} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+              <span>z:</span>{zBlock && <InlineValueBlock node={zBlock} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+            </span>
+          )}
+          {entBlock ? (
+            <InlineValueBlock node={entBlock} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+          ) : (
+            <span className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-white/20 text-[10.5px]">
+              Event/target entity
+            </span>
           )}
           {node.sourceLine && (
             <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
@@ -1982,9 +2702,9 @@ const BlocklyNodeRenderer: React.FC<{
         {node.fields && Object.keys(node.fields).length > 0 && (
           <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
             {Object.entries(node.fields).map(([k, v]) => (
-              <div key={k} className="flex items-center gap-1 px-1.5 py-0.5 rounded border bg-black/20 border-black/20">
-                <span className="text-white/80 font-medium text-[10px]">{k}:</span>
-                <span className="font-bold text-yellow-200 text-[10px] break-all">{String(v)}</span>
+              <div key={k} className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-white/20">
+                <span className="text-white/90 font-medium text-[10px]">{k}:</span>
+                <span className="font-bold text-white text-[10px] break-all">{String(v)}</span>
               </div>
             ))}
           </div>
@@ -1993,11 +2713,11 @@ const BlocklyNodeRenderer: React.FC<{
         {/* Sockets for Sub-Values - External (Stacked Rows) vs Inline */}
         {node.values && node.values.length > 0 && (
           isExternal ? (
-            <div className="flex flex-col gap-1 w-full pt-1 border-t border-black/20">
+            <div className="flex flex-col gap-1 w-full pt-1 border-t border-white/20">
               {node.values.map((v, idx) => (
-                <div key={idx} className="flex items-center justify-between gap-2 bg-black/25 px-2 py-1 rounded border border-black/30 w-full">
-                  <span className="text-white/80 text-[10px] font-semibold flex items-center gap-1 shrink-0">
-                    <span className="w-1.5 h-1.5 rounded-full bg-white/40" />
+                <div key={idx} className="flex items-center justify-between gap-2 px-2 py-0.5 rounded border border-white/20 w-full">
+                  <span className="text-white/90 text-[10px] font-semibold flex items-center gap-1 shrink-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white/60" />
                     {v.name}:
                   </span>
                   <div className="flex-1 flex justify-end">
@@ -2019,8 +2739,8 @@ const BlocklyNodeRenderer: React.FC<{
           ) : (
             <div className="flex items-center gap-1.5 flex-wrap text-[11px] pt-0.5">
               {node.values.map((v, idx) => (
-                <div key={idx} className="flex items-center gap-1 bg-black/25 px-1.5 py-0.5 rounded border border-black/30">
-                  <span className="text-white/70 text-[9px] font-semibold">{v.name}:</span>
+                <div key={idx} className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-white/20">
+                  <span className="text-white/90 text-[9px] font-semibold">{v.name}:</span>
                   {v.block ? (
                     <InlineValueBlock
                       node={v.block}
@@ -2061,9 +2781,9 @@ const BlocklyNodeRenderer: React.FC<{
 const InlineValueBlock: React.FC<{
   node: BlockASTNode;
   inputLayoutMode?: 'auto' | 'inline' | 'external';
-  
-  
-  
+  selectedLineNumber?: number | null;
+  selectedBlockId?: string | null;
+  onSelectBlock?: (id: string, line?: number) => void;
 }> = React.memo(({ node, inputLayoutMode = 'auto', selectedLineNumber, selectedBlockId, onSelectBlock }) => {
   const theme = MCREATOR_CATEGORY_THEMES[node.category] || MCREATOR_CATEGORY_THEMES.math;
   const isSelected = checkIsNodeSelected(node, selectedLineNumber, selectedBlockId);
@@ -2123,13 +2843,8 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Variables Getter: Get number [Local/Global: var ▾] (for entity: [entity])
-  if (
-    node.type === 'variables_get_number' ||
-    node.type === 'variables_get_logic' ||
-    node.type === 'variables_get_string' ||
-    node.type === 'variables_get_itemstack'
-  ) {
+  // Variables Getter: Get {type} [Local/Global: var ▾] (for entity: [entity])
+  if (node.type.startsWith('variables_get_')) {
     const rawVar = node.fields?.VAR || node.title || 'var';
     const isGlobal = rawVar.startsWith('global:');
     const varName = rawVar.replace(/^(?:local|global):/, '');
@@ -2242,21 +2957,189 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Math Dual Ops: Random [0,1)
-  if (node.type === 'math_dual_ops' && (node.fields?.OP === 'RANDOM' || node.title?.includes('Random'))) {
+  // Text Join: create text with [ ADD0 ] [ ADD1 ] ...
+  if (node.type === 'text_join') {
+    const addValues = node.values?.filter(v => v.name.startsWith('ADD')) || [];
     return (
       <div
         onClick={(e) => {
           e.stopPropagation();
         }}
-        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
-          isSelected ? '' : ''
-        }`}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: '#00897b', borderColor: '#004d40' }}
+      >
+        <span className="font-bold text-[10.5px] text-teal-100 flex items-center gap-1">
+          <Settings className="w-3 h-3 text-teal-200" /> create text with
+        </span>
+        {addValues.map((v, idx) => (
+          v.block && (
+            <InlineValueBlock
+              key={idx}
+              node={v.block}
+              inputLayoutMode={inputLayoutMode}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
+          )
+        ))}
+      </div>
+    );
+  }
+
+  // Math Constant: Random [0,1), PI, E, etc.
+  if (node.type === 'math_java_constants' || (node.type === 'math_dual_ops' && (node.fields?.OP === 'RANDOM' || node.title?.includes('Random')))) {
+    const constLabel = node.fields?.CONSTANT === 'PI' ? 'π' : node.fields?.CONSTANT === 'E' ? 'e' : 'Random [0,1)';
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
         style={{ backgroundColor: '#5b67a5', borderColor: '#485387' }}
       >
         <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
-          Random [0,1) <ChevronDown className="w-3 h-3 opacity-70" />
+          {constLabel} <ChevronDown className="w-3 h-3 opacity-70" />
         </span>
+      </div>
+    );
+  }
+
+  // Math Random Integer Between: Random integer between min: [min] and max: [max] included
+  if (node.type === 'math_random_int_between') {
+    const minBlock = node.values?.find(v => v.name === 'min')?.block;
+    const maxBlock = node.values?.find(v => v.name === 'max')?.block;
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: '#5b67a5', borderColor: '#485387' }}
+      >
+        <span className="font-bold text-[11px]">Random integer between min:</span>
+        {minBlock && (
+          <InlineValueBlock
+            node={minBlock}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        )}
+        <span className="font-bold text-[11px]">and max:</span>
+        {maxBlock && (
+          <InlineValueBlock
+            node={maxBlock}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        )}
+        <span className="font-bold text-[11px]">included</span>
+      </div>
+    );
+  }
+
+  // Math Random Number Between: Random number between min: [min] and max: [max]
+  if (node.type === 'math_random_number_between') {
+    const minBlock = node.values?.find(v => v.name === 'min')?.block;
+    const maxBlock = node.values?.find(v => v.name === 'max')?.block;
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: '#5b67a5', borderColor: '#485387' }}
+      >
+        <span className="font-bold text-[11px]">Random number between min:</span>
+        {minBlock && (
+          <InlineValueBlock
+            node={minBlock}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        )}
+        <span className="font-bold text-[11px]">and max:</span>
+        {maxBlock && (
+          <InlineValueBlock
+            node={maxBlock}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // Math Clamp: [value] clamped between min: [min] and max: [max]
+  if (node.type === 'math_clamp') {
+    const valBlock = node.values?.find(v => v.name === 'value')?.block;
+    const minBlock = node.values?.find(v => v.name === 'min')?.block;
+    const maxBlock = node.values?.find(v => v.name === 'max')?.block;
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: '#5b67a5', borderColor: '#485387' }}
+      >
+        {valBlock && (
+          <InlineValueBlock
+            node={valBlock}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        )}
+        <span className="font-bold text-[11px]">clamped between min:</span>
+        {minBlock && (
+          <InlineValueBlock
+            node={minBlock}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        )}
+        <span className="font-bold text-[11px]">and max:</span>
+        {maxBlock && (
+          <InlineValueBlock
+            node={maxBlock}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // Math Singular Ops: sin, cos, tan, abs, sqrt, round, etc.
+  if (node.type === 'math_singular_ops') {
+    const op = node.fields?.OP || 'SIN';
+    const numBlock = node.values?.find(v => v.name === 'NUM')?.block;
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: '#5b67a5', borderColor: '#485387' }}
+      >
+        <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+          {op.toLowerCase()} <ChevronDown className="w-3 h-3 opacity-70" />
+        </span>
+        {numBlock && (
+          <InlineValueBlock
+            node={numBlock}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        )}
       </div>
     );
   }
@@ -2332,12 +3215,40 @@ const InlineValueBlock: React.FC<{
         onClick={(e) => {
           e.stopPropagation();
         }}
-        className={`px-2 py-0.5 rounded text-white font-sans font-semibold text-[11px] shadow-xs border cursor-pointer shrink-0 ${
-          isSelected ? '' : ''
-        }`}
+        className="px-2 py-0.5 rounded text-white font-sans font-semibold text-[11px] shadow-xs border cursor-pointer shrink-0"
         style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
       >
         Event/target entity
+      </div>
+    );
+  }
+
+  // Entity Dependencies: Source entity
+  if (node.type === 'source_entity_from_deps') {
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className="px-2 py-0.5 rounded text-white font-sans font-semibold text-[11px] shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
+      >
+        Source entity
+      </div>
+    );
+  }
+
+  // Entity Dependencies: Immediate source entity
+  if (node.type === 'immediate_source_entity_from_deps') {
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className="px-2 py-0.5 rounded text-white font-sans font-semibold text-[11px] shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
+      >
+        Immediate source entity
       </div>
     );
   }
@@ -2667,6 +3578,694 @@ const InlineValueBlock: React.FC<{
     );
   }
 
+  // Entity Null ("No entity")
+  if (node.type === 'entity_null') {
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className={`px-2 py-0.5 rounded text-white font-sans font-bold text-[11px] shadow-xs border cursor-pointer shrink-0 flex items-center gap-1 ${
+          isSelected ? '' : ''
+        }`}
+        style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
+      >
+        <span className="text-[9px] px-1 py-0.2 bg-black/40 text-emerald-200 font-mono rounded">NULL</span>
+        <span>No entity</span>
+      </div>
+    );
+  }
+
+  // Is Mod Loaded ("Is the mod with ID [ "forge" ] loaded")
+  if (node.type === 'is_mod_loaded') {
+    const modIdBlock = node.values?.find(v => v.name === 'modid')?.block;
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
+          isSelected ? '' : ''
+        }`}
+        style={{ backgroundColor: '#5250bd', borderColor: '#4240a6' }}
+      >
+        <span className="font-bold text-[11px]">Is the mod with ID</span>
+        {modIdBlock ? (
+          <InlineValueBlock
+            node={modIdBlock}
+            inputLayoutMode={inputLayoutMode}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        ) : (
+          <span className="bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 font-mono text-[10px] px-1.5 py-0.5 rounded">
+            "forge"
+          </span>
+        )}
+        <span className="font-bold text-[11px]">loaded</span>
+      </div>
+    );
+  }
+
+  // Date and Time Category Blocks (time_seconds, time_minutes, time_hours, etc.)
+  if (node.type.startsWith('time_')) {
+    const timeLabels: Record<string, string> = {
+      time_seconds: 'Seconds',
+      time_minutes: 'Minutes',
+      time_hours: 'Hours (0-23)',
+      time_day_of_week: 'Day of week (1-7)',
+      time_week_of_year: 'Week of year',
+      time_day_of_month: 'Day of month (1-31)',
+      time_month: 'Month (1-12)',
+      time_year: 'Year',
+      time_format_default: 'Default date format',
+      time_format: 'Formatted date',
+    };
+    const label = timeLabels[node.type] || node.title || 'Date & Time';
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className={`px-2 py-0.5 rounded text-white font-sans font-semibold text-[11px] shadow-xs border cursor-pointer shrink-0 flex items-center gap-1 ${
+          isSelected ? '' : ''
+        }`}
+        style={{ backgroundColor: '#5c6bc0', borderColor: '#3949ab' }}
+      >
+        <span>📅 {label}</span>
+      </div>
+    );
+  }
+
+  // Procedure Return Value Blocks ("Call procedure and get ... return value")
+  if (node.type.startsWith('procedure_retval_')) {
+    const procName = node.fields?.procedure || node.title || 'No entry selected';
+    const returnType = node.type.replace('procedure_retval_', '');
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
+          isSelected ? '' : ''
+        }`}
+        style={{ backgroundColor: '#5250bd', borderColor: '#4240a6' }}
+      >
+        <span className="font-bold text-[11px]">Call procedure and get {returnType} return value</span>
+        <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[10.5px] shadow-xs">
+          {procName}
+        </span>
+      </div>
+    );
+  }
+
+  // Custom Dependency Blocks ("... dependency dependencyName")
+  if (node.type.startsWith('custom_dependency_')) {
+    const depType = node.type.replace('custom_dependency_', '').replace(/_/g, ' ');
+    const depName = node.fields?.dependencyName || node.title || 'dependencyName';
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className={`px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 ${
+          isSelected ? '' : ''
+        }`}
+        style={{ backgroundColor: '#5250bd', borderColor: '#4240a6' }}
+      >
+        <span className="font-semibold text-[10.5px] capitalize">{depType} dependency</span>
+        <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[10.5px] shadow-xs">
+          {depName}
+        </span>
+      </div>
+    );
+  }
+
+  // MCreator Link Category Blocks
+  if (node.type.startsWith('mcreator_link_')) {
+    const title = node.title || node.type.replace('mcreator_link_', '').replace(/_/g, ' ');
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        className={`px-2 py-0.5 rounded text-white font-sans font-semibold text-[11px] shadow-xs border cursor-pointer shrink-0 flex items-center gap-1 ${
+          isSelected ? '' : ''
+        }`}
+        style={{ backgroundColor: '#689f38', borderColor: '#558b2f' }}
+      >
+        <span>🔌 {title}</span>
+      </div>
+    );
+  }
+
+  // Vectors Category Blocks
+  if (node.type.startsWith('vector_')) {
+    const vTheme = { headerBg: '#7058a6', border: '#5d4691' };
+    const xVal = node.values?.find(v => v.name === 'x')?.block;
+    const yVal = node.values?.find(v => v.name === 'y')?.block;
+    const zVal = node.values?.find(v => v.name === 'z')?.block;
+    const vecVal = node.values?.find(v => v.name === 'vector' || v.name === 'vec' || v.name === 'a')?.block;
+    const vecValB = node.values?.find(v => v.name === 'b')?.block;
+    const factorVal = node.values?.find(v => v.name === 'by' || v.name === 'factor')?.block;
+
+    if (node.type === 'vector_create') {
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: vTheme.headerBg, borderColor: vTheme.border }}
+        >
+          <span className="font-bold text-[11px]">Make vector with x:</span>
+          {xVal && <InlineValueBlock node={xVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">y:</span>
+          {yVal && <InlineValueBlock node={yVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">z:</span>
+          {zVal && <InlineValueBlock node={zVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        </div>
+      );
+    }
+
+    if (node.type === 'vector_distance') {
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: vTheme.headerBg, borderColor: vTheme.border }}
+        >
+          <span className="font-bold text-[11px]">Get distance between</span>
+          {vecVal && <InlineValueBlock node={vecVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">and</span>
+          {vecValB && <InlineValueBlock node={vecValB} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        </div>
+      );
+    }
+
+    if (node.type === 'vector_scale') {
+      const op = node.fields?.type || 'Multiplication';
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: vTheme.headerBg, borderColor: vTheme.border }}
+        >
+          <span className="font-bold text-[11px]">Scale vector</span>
+          {vecVal && <InlineValueBlock node={vecVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">by</span>
+          {factorVal && <InlineValueBlock node={factorVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">through</span>
+          <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+            {op} <ChevronDown className="w-3 h-3 opacity-70" />
+          </span>
+        </div>
+      );
+    }
+
+    if (node.type === 'vector_dimension_get_x' || node.type === 'vector_dimension_get_y' || node.type === 'vector_dimension_get_z') {
+      const component = node.type.endsWith('_x') ? 'X' : node.type.endsWith('_y') ? 'Y' : 'Z';
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: vTheme.headerBg, borderColor: vTheme.border }}
+        >
+          <span className="font-bold text-[11px]">{component} component of</span>
+          {vecVal && <InlineValueBlock node={vecVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        </div>
+      );
+    }
+
+    const vLabels: Record<string, string> = {
+      vector_length: 'Get length of vector',
+      vector_normalize: 'Normalized vector of',
+    };
+    const vLabel = vLabels[node.type] || node.title || 'Vector';
+
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); }}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: vTheme.headerBg, borderColor: vTheme.border }}
+      >
+        <span className="font-bold text-[11px]">{vLabel}</span>
+        {vecVal && <InlineValueBlock node={vecVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+      </div>
+    );
+  }
+
+  // Text Operations Category Blocks
+  if (
+    node.type === 'text_length' ||
+    node.type === 'text_newline' ||
+    node.type === 'text_indexof' ||
+    node.type === 'text_is_empty' ||
+    node.type === 'text_replace' ||
+    node.type === 'text_regex_replace' ||
+    node.type === 'text_substring'
+  ) {
+    const tTheme = { headerBg: '#00897b', border: '#004d40' };
+    const valA = node.values?.find(v => v.name === 'VALUE' || v.name === 'text' || v.name === 'target')?.block;
+    const valB = node.values?.find(v => v.name === 'FIND' || v.name === 'with' || v.name === 'from')?.block;
+    const valC = node.values?.find(v => v.name === 'IN' || v.name === 'on')?.block;
+    const posVal = node.values?.find(v => v.name === 'start' || v.name === 'position')?.block;
+
+    if (node.type === 'text_newline') {
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans font-bold text-[11px] shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: tTheme.headerBg, borderColor: tTheme.border }}
+        >
+          New line
+        </div>
+      );
+    }
+
+    if (node.type === 'text_indexof') {
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: '#5250bd', borderColor: '#4240a6' }}
+        >
+          <span className="font-bold text-[11px]">Index of:</span>
+          {valA && <InlineValueBlock node={valA} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">in:</span>
+          {valC && <InlineValueBlock node={valC} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">start looking from:</span>
+          {posVal && <InlineValueBlock node={posVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        </div>
+      );
+    }
+
+    if (node.type === 'text_is_empty') {
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: '#5250bd', borderColor: '#4240a6' }}
+        >
+          <span className="font-bold text-[11px]">Is text empty:</span>
+          {valA && <InlineValueBlock node={valA} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        </div>
+      );
+    }
+
+    if (node.type === 'text_replace') {
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: tTheme.headerBg, borderColor: tTheme.border }}
+        >
+          <span className="font-bold text-[11px]">Replace:</span>
+          {valA && <InlineValueBlock node={valA} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">with:</span>
+          {valB && <InlineValueBlock node={valB} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">on:</span>
+          {valC && <InlineValueBlock node={valC} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        </div>
+      );
+    }
+
+    if (node.type === 'text_regex_replace') {
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: tTheme.headerBg, borderColor: tTheme.border }}
+        >
+          <span className="font-bold text-[11px]">Replace all matches of regex:</span>
+          {valA && <InlineValueBlock node={valA} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">with:</span>
+          {valB && <InlineValueBlock node={valB} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">on:</span>
+          {valC && <InlineValueBlock node={valC} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        </div>
+      );
+    }
+
+    if (node.type === 'text_substring') {
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: tTheme.headerBg, borderColor: tTheme.border }}
+        >
+          <span className="font-bold text-[11px]">Substring:</span>
+          {valA && <InlineValueBlock node={valA} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">from position:</span>
+          {posVal && <InlineValueBlock node={posVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        </div>
+      );
+    }
+
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); }}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: tTheme.headerBg, borderColor: tTheme.border }}
+      >
+        <span className="font-bold text-[11px]">length of</span>
+        {valA && <InlineValueBlock node={valA} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+      </div>
+    );
+  }
+
+  // Math Number from Text & Math Lerp
+  if (node.type === 'math_from_text' || node.type === 'math_lerp') {
+    const mTheme = { headerBg: '#5b67a5', border: '#485387' };
+    const textVal = node.values?.find(v => v.name === 'NUM' || v.name === 'text')?.block;
+
+    if (node.type === 'math_from_text') {
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: '#5250bd', borderColor: '#4240a6' }}
+        >
+          <span className="font-bold text-[11px]">Number from text</span>
+          {textVal && <InlineValueBlock node={textVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        </div>
+      );
+    }
+
+    const tVal = node.values?.find(v => v.name === 't')?.block;
+    const aVal = node.values?.find(v => v.name === 'a')?.block;
+    const bVal = node.values?.find(v => v.name === 'b')?.block;
+
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); }}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: '#5250bd', borderColor: '#4240a6' }}
+      >
+        <span className="font-bold text-[11px]">Linear interpolation at:</span>
+        {tVal && <InlineValueBlock node={tVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        <span className="font-bold text-[11px]">between (at 0):</span>
+        {aVal && <InlineValueBlock node={aVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        <span className="font-bold text-[11px]">and (at 1):</span>
+        {bVal && <InlineValueBlock node={bVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+      </div>
+    );
+  }
+
+  // Logic Negate & Ternary & Specific Comparisons
+  if (
+    node.type === 'logic_negate' ||
+    node.type === 'logic_ternary' ||
+    node.type === 'logic_advancement_check' ||
+    node.type === 'logic_vector_cmp' ||
+    node.type === 'logic_direction_cmp' ||
+    node.type === 'logic_itemstack_cmp' ||
+    node.type === 'logic_block_cmp' ||
+    node.type === 'logic_blockstate_cmp' ||
+    node.type === 'logic_damage_source_check' ||
+    node.type === 'logic_entity_subtypeof'
+  ) {
+    const valA = node.values?.find(v => v.name === 'BOOL' || v.name === 'a' || v.name === 'IF' || v.name === 'entity')?.block;
+    const valB = node.values?.find(v => v.name === 'THEN' || v.name === 'b')?.block;
+    const valC = node.values?.find(v => v.name === 'ELSE')?.block;
+
+    if (node.type === 'logic_negate') {
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: '#5ba58c', borderColor: '#498671' }}
+        >
+          <span className="font-bold text-[11px]">not</span>
+          {valA && <InlineValueBlock node={valA} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        </div>
+      );
+    }
+
+    if (node.type === 'logic_ternary') {
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: '#424242', borderColor: '#212121' }}
+        >
+          <span className="font-bold text-[11px]">If</span>
+          {valA && <InlineValueBlock node={valA} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">then</span>
+          {valB && <InlineValueBlock node={valB} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">else</span>
+          {valC && <InlineValueBlock node={valC} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        </div>
+      );
+    }
+
+    if (node.type === 'logic_advancement_check') {
+      const adv = node.fields?.advancement || 'No entry selected';
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: '#5b80a5', borderColor: '#354d64' }}
+        >
+          <span className="font-bold text-[11px]">Is provided advancement equal to</span>
+          <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[10.5px] shadow-xs">{adv}</span>
+        </div>
+      );
+    }
+
+    if (node.type === 'logic_vector_cmp') {
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: '#7058a6', borderColor: '#5d4691' }}
+        >
+          <span className="font-bold text-[11px]">Is</span>
+          {valA && <InlineValueBlock node={valA} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">the same vector as</span>
+          {valB && <InlineValueBlock node={valB} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        </div>
+      );
+    }
+
+    if (node.type === 'logic_direction_cmp') {
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: '#935116', borderColor: '#572e0a' }}
+        >
+          {valA && <InlineValueBlock node={valA} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-amber-200 text-[10px] bg-black/30 px-1 rounded">=</span>
+          {valB && <InlineValueBlock node={valB} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        </div>
+      );
+    }
+
+    if (node.type === 'logic_itemstack_cmp') {
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: '#d32f2f', borderColor: '#b71c1c' }}
+        >
+          <span className="text-[10px]">💎</span>
+          {valA && <InlineValueBlock node={valA} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-red-200 text-[10px] bg-black/30 px-1 rounded">=</span>
+          <span className="text-[10px]">💎</span>
+          {valB && <InlineValueBlock node={valB} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        </div>
+      );
+    }
+
+    if (node.type === 'logic_block_cmp' || node.type === 'logic_blockstate_cmp') {
+      const isBs = node.type === 'logic_blockstate_cmp';
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: '#795548', borderColor: '#4e342e' }}
+        >
+          <span className="font-bold text-[11px]">Is</span>
+          {valA && <InlineValueBlock node={valA} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+          <span className="font-bold text-[11px]">the same {isBs ? 'blockstate' : 'block'} as</span>
+          {valB && <InlineValueBlock node={valB} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+        </div>
+      );
+    }
+
+    if (node.type === 'logic_damage_source_check') {
+      const type = node.fields?.type || 'No entry selected';
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: '#ad336d', borderColor: '#6b1840' }}
+        >
+          <span className="font-bold text-[11px]">Is</span>
+          {valA ? (
+            <InlineValueBlock node={valA} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+          ) : (
+            <span className="bg-[#ad336d] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-white/20 text-[10.5px]">
+              Provided damage source
+            </span>
+          )}
+          <span className="font-bold text-[11px]">of type</span>
+          <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[10.5px] shadow-xs">{type}</span>
+        </div>
+      );
+    }
+
+    if (node.type === 'logic_entity_subtypeof') {
+      const type = node.fields?.entity || 'No entry selected';
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: '#5ba58c', borderColor: '#376454' }}
+        >
+          <span className="font-bold text-[11px]">Is</span>
+          {valA ? (
+            <InlineValueBlock node={valA} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+          ) : (
+            <span className="bg-[#5ba58c] text-white px-2 py-0.5 rounded shadow-sm font-semibold border border-white/20 text-[10.5px]">
+              Event/target entity
+            </span>
+          )}
+          <span className="font-bold text-[11px]">(sub)type of</span>
+          <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[10.5px] shadow-xs">{type}</span>
+        </div>
+      );
+    }
+  }
+
+  // Minecraft Component Dependents & Constants
+  if (
+    node.type === 'damagesource_from_deps' ||
+    node.type === 'direction_constant' ||
+    node.type === 'direction_from_deps' ||
+    node.type === 'action_result_type' ||
+    node.type === 'blockstate_from_deps' ||
+    node.type === 'direction_iterator' ||
+    node.type === 'empty_itemstack' ||
+    node.type === 'itemstack_from_deps' ||
+    node.type === 'dimension_type_from_deps'
+  ) {
+    if (node.type === 'damagesource_from_deps') {
+      return (
+        <div onClick={(e) => { e.stopPropagation(); }} className="px-2 py-0.5 rounded text-white font-sans font-semibold text-[11px] shadow-xs border cursor-pointer shrink-0" style={{ backgroundColor: '#ad336d', borderColor: '#6b1840' }}>
+          Provided damage source
+        </div>
+      );
+    }
+
+    if (node.type === 'direction_constant') {
+      const dir = node.fields?.direction || node.title || 'DOWN';
+      return (
+        <div onClick={(e) => { e.stopPropagation(); }} className="px-2 py-0.5 rounded text-white font-sans font-bold text-[11px] shadow-xs border cursor-pointer shrink-0 flex items-center gap-1" style={{ backgroundColor: '#935116', borderColor: '#572e0a' }}>
+          <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[10.5px] flex items-center gap-1 shadow-xs">{dir} <ChevronDown className="w-3 h-3 opacity-70" /></span>
+        </div>
+      );
+    }
+
+    if (node.type === 'direction_from_deps') {
+      return (
+        <div onClick={(e) => { e.stopPropagation(); }} className="px-2 py-0.5 rounded text-white font-sans font-semibold text-[11px] shadow-xs border cursor-pointer shrink-0" style={{ backgroundColor: '#935116', borderColor: '#572e0a' }}>
+          Trigger direction/face
+        </div>
+      );
+    }
+
+    if (node.type === 'action_result_type') {
+      const result = node.fields?.type || 'SUCCESS';
+      return (
+        <div onClick={(e) => { e.stopPropagation(); }} className="px-2 py-0.5 rounded text-white font-sans font-bold text-[11px] shadow-xs border cursor-pointer shrink-0 flex items-center gap-1.5" style={{ backgroundColor: '#689f38', borderColor: '#558b2f' }}>
+          <span>Action result of type</span>
+          <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[10.5px] flex items-center gap-1 shadow-xs">{result} <ChevronDown className="w-3 h-3 opacity-70" /></span>
+        </div>
+      );
+    }
+
+    if (node.type === 'blockstate_from_deps') {
+      return (
+        <div onClick={(e) => { e.stopPropagation(); }} className="px-2 py-0.5 rounded text-white font-sans font-semibold text-[11px] shadow-xs border cursor-pointer shrink-0" style={{ backgroundColor: '#795548', borderColor: '#4e342e' }}>
+          Provided blockstate
+        </div>
+      );
+    }
+
+    if (node.type === 'direction_iterator') {
+      return (
+        <div onClick={(e) => { e.stopPropagation(); }} className="px-2 py-0.5 rounded text-white font-sans font-semibold text-[11px] shadow-xs border cursor-pointer shrink-0" style={{ backgroundColor: '#935116', borderColor: '#572e0a' }}>
+          Direction iterator
+        </div>
+      );
+    }
+
+    if (node.type === 'empty_itemstack') {
+      return (
+        <div onClick={(e) => { e.stopPropagation(); }} className="px-2 py-0.5 rounded text-white font-sans font-semibold text-[11px] shadow-xs border cursor-pointer shrink-0" style={{ backgroundColor: '#d32f2f', borderColor: '#b71c1c' }}>
+          Empty itemstack
+        </div>
+      );
+    }
+
+    if (node.type === 'itemstack_from_deps') {
+      return (
+        <div onClick={(e) => { e.stopPropagation(); }} className="px-2 py-0.5 rounded text-white font-sans font-semibold text-[11px] shadow-xs border cursor-pointer shrink-0" style={{ backgroundColor: '#d32f2f', borderColor: '#b71c1c' }}>
+          Provided itemstack
+        </div>
+      );
+    }
+
+    if (node.type === 'dimension_type_from_deps') {
+      return (
+        <div onClick={(e) => { e.stopPropagation(); }} className="px-2 py-0.5 rounded text-white font-sans font-semibold text-[11px] shadow-xs border cursor-pointer shrink-0" style={{ backgroundColor: '#689f38', borderColor: '#558b2f' }}>
+          Provided dimension type
+        </div>
+      );
+    }
+  }
+
+  // World Data & GUI Getter Inline Value Blocks
+  if (node.type.startsWith('world_data_') || node.type.startsWith('gui_get_') || node.type.startsWith('entity_from_')) {
+    const wBg = node.type.startsWith('gui_') ? '#488b49' : '#5b80a5';
+    const wBorder = node.type.startsWith('gui_') ? '#275728' : '#354d64';
+    const xVal = node.values?.find(v => v.name === 'x')?.block;
+    const yVal = node.values?.find(v => v.name === 'y')?.block;
+    const zVal = node.values?.find(v => v.name === 'z')?.block;
+    const entVal = node.values?.find(v => v.name === 'entity')?.block;
+    const slotVal = node.values?.find(v => v.name === 'slot')?.block;
+
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); }}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0 flex-wrap"
+        style={{ backgroundColor: wBg, borderColor: wBorder }}
+      >
+        <span className="font-bold text-[11px]">{node.title || node.explanation || node.type.replace(/_/g, ' ')}</span>
+        {node.fields && Object.entries(node.fields).map(([k, v]) => (
+          <span key={k} className="bg-white/95 text-[#14171d] font-bold px-1.5 py-0.2 rounded text-[10.5px] flex items-center gap-1 shadow-xs">
+            {String(v)} <ChevronDown className="w-2.5 h-2.5 opacity-70" />
+          </span>
+        ))}
+        {slotVal && (
+          <>
+            <span className="font-bold text-[11px]">slot</span>
+            <InlineValueBlock node={slotVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />
+          </>
+        )}
+        {(xVal || yVal || zVal) && (
+          <span className="flex items-center gap-1 text-[11px] font-bold">
+            {xVal && <><span>at x:</span><InlineValueBlock node={xVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} /></>}
+            {yVal && <><span>y:</span><InlineValueBlock node={yVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} /></>}
+            {zVal && <><span>z:</span><InlineValueBlock node={zVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} /></>}
+          </span>
+        )}
+        {entVal && <InlineValueBlock node={entVal} inputLayoutMode={inputLayoutMode} selectedLineNumber={selectedLineNumber} selectedBlockId={selectedBlockId} onSelectBlock={onSelectBlock} />}
+      </div>
+    );
+  }
+
   // NBT Getters, Checks, and Tag Operations
   if (
     node.type.startsWith('entity_nbt_') ||
@@ -2680,7 +4279,7 @@ const InlineValueBlock: React.FC<{
     const tagName = node.values?.find(v => v.name === 'tagName' || v.name === 'tag')?.block;
     const entityBlock = node.values?.find(v => v.name === 'entity')?.block;
     const itemBlock = node.values?.find(v => v.name === 'item' || v.name === 'itemstack')?.block;
-    const tagHolderBlock = node.values?.find(v => v.name === 'tag' && v.name !== 'tagName')?.block;
+    const tagHolderBlock = node.values?.find(v => v.name === 'tag')?.block;
     const typeBlock = node.values?.find(v => v.name === 'type')?.block;
     const xVal = node.values?.find(v => v.name === 'x')?.block;
     const yVal = node.values?.find(v => v.name === 'y')?.block;
@@ -2900,57 +4499,14 @@ const InlineValueBlock: React.FC<{
   if (node.type === 'math_binary' || node.type === 'math_dual_ops') {
     const leftVal = node.values?.find(v => v.name === 'A')?.block;
     const rightVal = node.values?.find(v => v.name === 'B')?.block;
-    const op = node.fields?.OP === 'ADD' ? '+' : node.fields?.OP === 'MINUS' ? '-' : node.fields?.OP || '+';
-
-    if (isExternal) {
-      return (
-        <div
-          onClick={(e) => {
-            e.stopPropagation();
-          }}
-          className={`p-1.5 rounded text-white font-sans text-[11px] flex flex-col gap-1 shadow-xs border cursor-pointer max-w-full ${
-            isSelected ? '' : ''
-          }`}
-          style={{ backgroundColor: theme.headerBg, borderColor: theme.border }}
-        >
-          <div className="flex items-center justify-between gap-1 border-b border-black/20 pb-0.5">
-            <span className="text-[10px] font-bold text-white/85">Math Operation</span>
-            <span className="font-bold px-1.5 py-0.2 rounded bg-black/40 border border-white/20 text-yellow-200 text-[10px]">
-              {op}
-            </span>
-          </div>
-          <div className="flex flex-col gap-1 pl-1">
-            {leftVal && (
-              <InlineValueBlock
-                node={leftVal}
-                inputLayoutMode={inputLayoutMode}
-                selectedLineNumber={selectedLineNumber}
-                selectedBlockId={selectedBlockId}
-                onSelectBlock={onSelectBlock}
-              />
-            )}
-            {rightVal && (
-              <InlineValueBlock
-                node={rightVal}
-                inputLayoutMode={inputLayoutMode}
-                selectedLineNumber={selectedLineNumber}
-                selectedBlockId={selectedBlockId}
-                onSelectBlock={onSelectBlock}
-              />
-            )}
-          </div>
-        </div>
-      );
-    }
+    const op = node.fields?.OP === 'ADD' ? '+' : node.fields?.OP === 'MINUS' ? '-' : node.fields?.OP === 'MULTIPLY' ? '×' : node.fields?.OP === 'DIVIDE' ? '÷' : node.fields?.OP || '+';
 
     return (
       <div
         onClick={(e) => {
           e.stopPropagation();
         }}
-        className={`px-1.5 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1 shadow-xs border cursor-pointer shrink-0 ${
-          isSelected ? '' : ''
-        }`}
+        className="px-1.5 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1 shadow-xs border cursor-pointer shrink-0"
         style={{ backgroundColor: theme.headerBg, borderColor: theme.border }}
       >
         {leftVal && (
@@ -2962,8 +4518,8 @@ const InlineValueBlock: React.FC<{
             onSelectBlock={onSelectBlock}
           />
         )}
-        <span className="font-bold px-1 py-0.2 rounded bg-black/30 border border-white/20 text-yellow-200 text-[10px]">
-          {op}
+        <span className="font-bold px-1.5 py-0.2 rounded bg-white/95 text-[#14171d] text-[10px] flex items-center gap-0.5 shadow-xs">
+          {op} <ChevronDown className="w-2.5 h-2.5 opacity-70" />
         </span>
         {rightVal && (
           <InlineValueBlock
@@ -3260,9 +4816,9 @@ const InlineValueBlock: React.FC<{
 
 const TreeASTInspector: React.FC<{
   node: BlockASTNode;
-  
-  
-  
+  selectedLineNumber?: number | null;
+  selectedBlockId?: string | null;
+  onSelectBlock?: (id: string, line?: number) => void;
 }> = React.memo(({ node, selectedLineNumber, selectedBlockId, onSelectBlock }) => {
   const isSelected = checkIsNodeSelected(node, selectedLineNumber, selectedBlockId);
 

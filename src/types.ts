@@ -89,6 +89,7 @@ export interface BlockASTNode {
   statements?: { name: string; block?: BlockASTNode }[];
   next?: BlockASTNode;
   comment?: string;
+  explanation?: string;
   sourceLine?: number;
   sourceEndLine?: number;
   rawJava?: string;

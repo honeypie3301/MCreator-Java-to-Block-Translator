@@ -67,7 +67,7 @@ export function translateJavaToMCreator(
       /^execute\s*\([\s\S]*?\);?$/.test(activeMethod.body.trim().replace(/\/\/.*$/gm, '').trim())
     );
 
-    if (isDelegator && realExecuteMethod && realExecuteMethod.body.length > activeMethod.body.length) {
+    if (isDelegator && realExecuteMethod && activeMethod && realExecuteMethod.body.length > activeMethod.body.length) {
       // Inherit the event trigger from the subscriber method if it had one
       if (activeMethod.eventTrigger) {
         bridgeTrigger = activeMethod.eventTrigger;
@@ -346,11 +346,90 @@ export interface StatementWithLocation {
  * - Replaces usages like `world.playSound(...)` → `level.playSound(...)`
  */
 /**
+ * Unwraps guarded method calls with balanced parentheses.
+ */
+function unwrapGuardedMethod(code: string, guardPattern: RegExp, methodName: string, targetOverride?: string): string {
+  let res = code;
+  let idx = 0;
+  while (true) {
+    const match = res.substring(idx).match(guardPattern);
+    if (!match) break;
+    const matchStart = idx + (match.index || 0);
+    const mIdx = res.indexOf(methodName + '(', matchStart);
+    if (mIdx === -1 || mIdx > matchStart + 150) {
+      idx = matchStart + 10;
+      continue;
+    }
+    const openParen = res.indexOf('(', mIdx);
+    let depth = 0;
+    let closeParen = -1;
+    for (let i = openParen; i < res.length; i++) {
+      if (res[i] === '(') depth++;
+      else if (res[i] === ')') {
+        depth--;
+        if (depth === 0) { closeParen = i; break; }
+      }
+    }
+    if (closeParen === -1) { idx = mIdx + 1; continue; }
+    let endOfStmt = closeParen + 1;
+    while (endOfStmt < res.length && /[\s;}]/.test(res[endOfStmt])) {
+      if (res[endOfStmt] === ';') { endOfStmt++; break; }
+      endOfStmt++;
+    }
+    const args = res.substring(openParen + 1, closeParen);
+    const target = targetOverride !== undefined ? (targetOverride === '$1' ? match[1] : targetOverride) : (match[1] || '');
+    const replacement = `${target ? target + '.' : ''}${methodName}(${args});`;
+    res = res.substring(0, matchStart) + replacement + res.substring(endOfStmt);
+    idx = matchStart + replacement.length;
+  }
+  return res;
+}
+
+/**
  * Unwraps MCreator Java code generator boilerplate, transforming raw NeoForge compiled
  * output idioms back into clean, high-level procedure expressions.
  */
 function unwrapMCreatorBoilerplate(text: string): string {
   let s = text;
+
+  // -1. Strip procedure entry dependency null check:
+  // if (entity == null || sourceentity == null) return;
+  // if (world == null || entity == null) return;
+  s = s.replace(
+    /^\s*if\s*\(\s*(?:entity|sourceentity|world|level|_level|immediatesourceentity)\s*==\s*null(?:\s*\|\|\s*(?:entity|sourceentity|world|level|_level|immediatesourceentity)\s*==\s*null)*\s*\)\s*return\s*;\s*$/gm,
+    ''
+  );
+
+  // -0.5. Unwrap entity despawn guard:
+  // if (!entity.level().isClientSide()) entity.discard();
+  // if (!_ent.level().isClientSide()) _ent.discard();
+  s = s.replace(
+    /if\s*\(\s*!([a-zA-Z0-9_.]+)\.level\(\)\.isClientSide\(\)\s*\)\s*\{?\s*\1\.discard\(\)\s*;?\s*\}?/g,
+    (_, ent) => `${ent}.discard();`
+  );
+
+  // -0.45. Unwrap ServerPlayer entity_switch_dimension boilerplate sequence:
+  s = s.replace(
+    /if\s*\(\s*([a-zA-Z0-9_.]+)\s+instanceof\s+ServerPlayer\s+([_a-zA-Z0-9]+)\s*&&\s*!\2\.level\(\)\.isClientSide\(\)\s*\)\s*\{\s*ResourceKey<Level>\s*destinationType\s*=\s*([^;]+);[\s\S]*?teleportTo\(nextLevel[\s\S]*?\}\s*\}/g,
+    (_, ent, _player, resKeyExpr) => {
+      return `${ent}.switchDimension(${resKeyExpr.trim()});`;
+    }
+  );
+
+  // -0.4. Unwrap ServerLevel sendParticles guard with balanced parentheses:
+  // if (world instanceof ServerLevel _level) _level.sendParticles(...)
+  s = unwrapGuardedMethod(s, /if\s*\(\s*(?:world|level)\s+instanceof\s+ServerLevel\s+([_a-zA-Z0-9]+)\s*\)\s*\{?\s*\1\./, 'sendParticles', '_level');
+
+  // -0.3. Unwrap LivingEntity addEffect potion guard with balanced parentheses:
+  // if (sourceentity instanceof LivingEntity _entity && !_entity.level().isClientSide()) _entity.addEffect(...)
+  s = unwrapGuardedMethod(s, /if\s*\(\s*([a-zA-Z0-9_.]+)\s+instanceof\s+LivingEntity\s+([_a-zA-Z0-9]+)\s*&&\s*!\2\.level\(\)\.isClientSide\(\)\s*\)\s*\{?\s*\2\./, 'addEffect', '$1');
+
+  // -0.2. Unwrap Level playSound / playLocalSound dual client/server guard:
+  // if (world instanceof Level _level) { if (!_level.isClientSide()) { ... } else { ... } }
+  s = s.replace(
+    /if\s*\(\s*(?:world|level)\s+instanceof\s+Level\s+([_a-zA-Z0-9]+)\s*\)\s*\{\s*if\s*\(\s*!\1\.isClientSide\(\)\s*\)\s*\{([\s\S]*?)\}\s*else\s*\{[\s\S]*?\}\s*\}/g,
+    (_, _lvl, serverSideBody) => serverSideBody.trim()
+  );
 
   // 0. Unwrap statement-level instanceof defensive type guard wrappers:
   // if (entity instanceof Player _player) _player.causeFoodExhaustion(-1); -> entity.causeFoodExhaustion(-1);
@@ -399,7 +478,7 @@ function unwrapMCreatorBoilerplate(text: string): string {
   // 4. Unwrap SoundEvent / BuiltInRegistries lookup in playSound:
   // BuiltInRegistries.SOUND_EVENT.get(ResourceLocation.parse("the_backwoods:wood_creak_paranoia")) -> "wood_creak_paranoia"
   s = s.replace(
-    /BuiltInRegistries\.SOUND_EVENT\.get\(\s*ResourceLocation\.(?:parse|fromNamespaceAndPath)\(\s*["']([^"']+)["']\s*\)\s*\)/g,
+    /BuiltInRegistries\.SOUND_EVENT\.(?:get|getValue)\(\s*(?:ResourceLocation|Identifier)\.(?:parse|fromNamespaceAndPath)\(\s*["']([^"']+)["']\s*\)\s*\)/g,
     (_, soundLoc) => {
       const parts = soundLoc.split(':');
       return '"' + (parts.length > 1 ? parts[1] : parts[0]) + '"';
@@ -2141,10 +2220,60 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 11.6 SPAWN PARTICLES: _level.sendParticles(...) / world.addParticle(...)
+  // 11.6 SPAWN PARTICLES: _level.sendParticles(...) / world.sendParticles(...) / world.addParticle(...)
   if (stmt.includes('.sendParticles(') || stmt.includes('.addParticle(')) {
-    const partMatch = stmt.match(/(?:sendParticles|addParticle)\s*\(([^)]+)\)/);
-    const params = partMatch ? partMatch[1].split(',').map(s => s.trim()) : [];
+    const fnName = stmt.includes('.sendParticles(') ? 'sendParticles' : 'addParticle';
+    const openParen = stmt.indexOf(fnName + '(') + fnName.length;
+    let depth = 0;
+    let closeParen = -1;
+    for (let i = openParen; i < stmt.length; i++) {
+      if (stmt[i] === '(') depth++;
+      else if (stmt[i] === ')') {
+        depth--;
+        if (depth === 0) { closeParen = i; break; }
+      }
+    }
+    const argsStr = closeParen !== -1 ? stmt.substring(openParen + 1, closeParen) : '';
+    const params = splitArgs(argsStr);
+
+    if (params.length >= 8) {
+      const partType = (params[0] || 'CAMPFIRE_COSY_SMOKE')
+        .replace(/ParticleTypes\./, '')
+        .toLowerCase()
+        .split('_')
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+      const px = params[1] || 'x';
+      const py = params[2] || 'y';
+      const pz = params[3] || 'z';
+      const countExpr = params[4] || '5';
+      const pdx = params[5] || '0.5';
+      const pdy = params[6] || '0.5';
+      const pdz = params[7] || '0.5';
+      const pSpeed = params[8] || '0.001';
+
+      breakdown.push({ javaLine: stmt, mcreatorBlock: 'spawn_particle_multi', explanation: `Spawn ${countExpr} server-side particles of type '${partType}'` });
+      return {
+        id: `part_${idSeq}`,
+        type: 'spawn_particle_multi',
+        category: 'action',
+        title: `Spawn ${countExpr} server-side particles`,
+        fields: { particle: partType },
+        values: [
+          { name: 'count', block: parseExpressionToAST(countExpr, idSeq * 10 + 1) },
+          { name: 'x', block: parseExpressionToAST(px, idSeq * 10 + 2) },
+          { name: 'y', block: parseExpressionToAST(py, idSeq * 10 + 3) },
+          { name: 'z', block: parseExpressionToAST(pz, idSeq * 10 + 4) },
+          { name: 'dx', block: parseExpressionToAST(pdx, idSeq * 10 + 5) },
+          { name: 'dy', block: parseExpressionToAST(pdy, idSeq * 10 + 6) },
+          { name: 'dz', block: parseExpressionToAST(pdz, idSeq * 10 + 7) },
+          { name: 'speed', block: parseExpressionToAST(pSpeed, idSeq * 10 + 8) },
+        ],
+        sourceLine: startLine,
+        sourceEndLine: endLine,
+      };
+    }
+
     const partType = params[0] || 'ParticleTypes.POOF';
     const px = params[1] || 'x';
     const py = params[2] || 'y';
@@ -2165,6 +2294,8 @@ function parseJavaStatementInternal(
         { name: 'ys', block: { id: `ys_${idSeq}`, type: 'math_number', category: 'math', title: '1', fields: { NUM: '1' } } },
         { name: 'zs', block: { id: `zs_${idSeq}`, type: 'math_number', category: 'math', title: '0', fields: { NUM: '0' } } },
       ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
     };
   }
 
@@ -2272,7 +2403,41 @@ function parseJavaStatementInternal(
       type: 'entity_despawn',
       category: 'action',
       title: 'Despawn entity',
-      values: [{ name: 'entity', block: parseExpressionToAST(target, idSeq * 10 + 1) }],
+    };
+  }
+
+  // 11.8 SWITCH DIMENSION: entity.switchDimension(...) / changeDimension(...)
+  if (stmt.includes('switchDimension') || stmt.includes('changeDimension') || stmt.includes('entity_switch_dimension')) {
+    const targetMatch = stmt.match(/^([a-zA-Z0-9_.]+)\.(?:switchDimension|changeDimension)\s*\(([\s\S]+)\);?/);
+    let target = 'entity';
+    let rawDim = 'CUSTOM:TheGrain';
+    if (targetMatch) {
+      target = targetMatch[1].trim();
+      rawDim = targetMatch[2].trim();
+    }
+    let cleanDim = 'CUSTOM:TheGrain';
+    const resLocMatch = rawDim.match(/ResourceLocation\.(?:parse|fromNamespaceAndPath)\(\s*["']([^"']+)["']\s*\)/);
+    if (resLocMatch) {
+      const parts = resLocMatch[1].split(':');
+      const name = parts.length > 1 ? parts[1] : parts[0];
+      cleanDim = 'CUSTOM:' + name.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
+    } else if (rawDim.includes('CUSTOM:')) {
+      cleanDim = rawDim;
+    } else if (rawDim.startsWith('"') || rawDim.startsWith("'")) {
+      const name = rawDim.replace(/^["']|["']$/g, '');
+      cleanDim = 'CUSTOM:' + name.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
+    }
+
+    breakdown.push({ javaLine: stmt, mcreatorBlock: 'entity_switch_dimension', explanation: `Switch dimension of entity to '${cleanDim}'` });
+    return {
+      id: `switch_dim_${idSeq}`,
+      type: 'entity_switch_dimension',
+      category: 'entity',
+      title: `Switch dimension of entity to ${cleanDim.replace('CUSTOM:', '')}`,
+      fields: { dimension: cleanDim },
+      values: [
+        { name: 'entity', block: parseExpressionToAST(target, idSeq * 10 + 1) },
+      ],
     };
   }
 
@@ -2780,20 +2945,54 @@ function parseJavaStatementInternal(
   }
 
   // 19. SEND CHAT / SYSTEM MESSAGE
-  if (stmt.includes('displayClientMessage') || stmt.includes('sendSystemMessage')) {
-    const msgMatch = stmt.match(/Component\.(?:literal|translatable)\(([^)]+)\)/);
-    const msg = msgMatch ? msgMatch[1].trim() : '"Message"';
+  if (stmt.includes('displayClientMessage') || stmt.includes('sendSystemMessage') || stmt.includes('sendSuccess')) {
+    let msgExpr = '"Message"';
+    let isActbar = 'FALSE';
+    let targetEnt = 'entity';
+
+    const entMatch = stmt.match(/^([a-zA-Z0-9_.]+)\.(?:displayClientMessage|sendSystemMessage|sendSuccess)/);
+    if (entMatch) {
+      targetEnt = entMatch[1].trim();
+    }
+
+    const dIdx = stmt.search(/(?:displayClientMessage|sendSystemMessage|sendSuccess)\s*\(/);
+    if (dIdx !== -1) {
+      const openParen = stmt.indexOf('(', dIdx);
+      let depth = 0;
+      let closeParen = -1;
+      for (let i = openParen; i < stmt.length; i++) {
+        if (stmt[i] === '(') depth++;
+        else if (stmt[i] === ')') {
+          depth--;
+          if (depth === 0) { closeParen = i; break; }
+        }
+      }
+      if (closeParen !== -1) {
+        const fullArgsStr = stmt.substring(openParen + 1, closeParen);
+        const args = splitArgs(fullArgsStr);
+        if (args.length >= 1) {
+          msgExpr = args[0].trim();
+          const compMatch = msgExpr.match(/^Component\.(?:literal|translatable)\s*\(([\s\S]+)\)$/);
+          if (compMatch) {
+            msgExpr = compMatch[1].trim();
+          }
+        }
+        if (args.length >= 2) {
+          isActbar = args[1].trim().toLowerCase() === 'true' ? 'TRUE' : 'FALSE';
+        }
+      }
+    }
 
     breakdown.push({ javaLine: stmt, mcreatorBlock: 'entity_send_chat', explanation: 'Send chat message to player' });
     return {
       id: `chat_${idSeq}`,
       type: 'entity_send_chat',
       category: 'action',
-      title: 'Send Chat Message',
+      title: 'Send message to player',
       values: [
-        { name: 'text', block: parseExpressionToAST(msg, idSeq * 10 + 1) },
-        { name: 'actbar', block: { id: `actbar_${idSeq}`, type: 'logic_boolean', category: 'logic', title: 'false', fields: { BOOL: 'FALSE' } } },
-        { name: 'entity', block: { id: `ent_${idSeq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' } },
+        { name: 'text', block: parseExpressionToAST(msgExpr, idSeq * 10 + 1) },
+        { name: 'actbar', block: { id: `actbar_${idSeq}`, type: 'logic_boolean', category: 'logic', title: isActbar, fields: { BOOL: isActbar } } },
+        { name: 'entity', block: parseExpressionToAST(targetEnt, idSeq * 10 + 3) },
       ],
     };
   }
@@ -3697,13 +3896,117 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
   }
 
   // Math.random() -> Random [0,1)
-  if (expr === 'Math.random()' || expr === 'java.lang.Math.random()') {
+  if (expr === 'Math.random()' || expr === 'java.lang.Math.random()' || expr.includes('Math.random()')) {
     return {
       id: `rnd_${seq}`,
-      type: 'math_dual_ops',
+      type: 'math_java_constants',
       category: 'math',
       title: 'Random [0,1)',
-      fields: { OP: 'RANDOM' },
+      fields: { CONSTANT: 'RANDOM' },
+    };
+  }
+
+  // Mth.nextInt(...) -> math_random_int_between
+  if (expr.includes('Mth.nextInt(')) {
+    const fnArgs = extractFunctionArguments(expr, 'Mth.nextInt');
+    let minArg = '1';
+    let maxArg = '10';
+    if (fnArgs.length >= 3) {
+      minArg = fnArgs[1].trim();
+      maxArg = fnArgs[2].trim();
+    } else if (fnArgs.length === 2) {
+      minArg = fnArgs[0].trim();
+      maxArg = fnArgs[1].trim();
+    }
+    return {
+      id: `rnd_int_${seq}`,
+      type: 'math_random_int_between',
+      category: 'math',
+      title: `Random integer between min: ${minArg} and max: ${maxArg} included`,
+      values: [
+        { name: 'min', block: parseExpressionToAST(minArg, seq * 10 + 1) },
+        { name: 'max', block: parseExpressionToAST(maxArg, seq * 10 + 2) },
+      ],
+    };
+  }
+
+  // Mth.nextDouble(...) -> math_random_number_between
+  if (expr.includes('Mth.nextDouble(')) {
+    const fnArgs = extractFunctionArguments(expr, 'Mth.nextDouble');
+    let minArg = '0';
+    let maxArg = '1';
+    if (fnArgs.length >= 3) {
+      minArg = fnArgs[1].trim();
+      maxArg = fnArgs[2].trim();
+    } else if (fnArgs.length === 2) {
+      minArg = fnArgs[0].trim();
+      maxArg = fnArgs[1].trim();
+    }
+    return {
+      id: `rnd_num_${seq}`,
+      type: 'math_random_number_between',
+      category: 'math',
+      title: `Random number between min: ${minArg} and max: ${maxArg}`,
+      values: [
+        { name: 'min', block: parseExpressionToAST(minArg, seq * 10 + 1) },
+        { name: 'max', block: parseExpressionToAST(maxArg, seq * 10 + 2) },
+      ],
+    };
+  }
+
+  // Mth.clamp(...) or Math.clamp(...) -> math_clamp
+  if (expr.includes('Mth.clamp(') || expr.includes('Math.clamp(')) {
+    const fnArgs = extractFunctionArguments(expr, expr.includes('Mth.clamp(') ? 'Mth.clamp' : 'Math.clamp');
+    if (fnArgs.length >= 3) {
+      return {
+        id: `clamp_${seq}`,
+        type: 'math_clamp',
+        category: 'math',
+        title: 'clamped between min and max',
+        values: [
+          { name: 'value', block: parseExpressionToAST(fnArgs[0].trim(), seq * 10 + 1) },
+          { name: 'min', block: parseExpressionToAST(fnArgs[1].trim(), seq * 10 + 2) },
+          { name: 'max', block: parseExpressionToAST(fnArgs[2].trim(), seq * 10 + 3) },
+        ],
+      };
+    }
+  }
+
+  // Mth.lerp(...) -> math_lerp
+  if (expr.includes('Mth.lerp(')) {
+    const fnArgs = extractFunctionArguments(expr, 'Mth.lerp');
+    if (fnArgs.length >= 3) {
+      return {
+        id: `lerp_${seq}`,
+        type: 'math_lerp',
+        category: 'math',
+        title: 'Linear interpolation',
+        values: [
+          { name: 't', block: parseExpressionToAST(fnArgs[0].trim(), seq * 10 + 1) },
+          { name: 'a', block: parseExpressionToAST(fnArgs[1].trim(), seq * 10 + 2) },
+          { name: 'b', block: parseExpressionToAST(fnArgs[2].trim(), seq * 10 + 3) },
+        ],
+      };
+    }
+  }
+
+  // Math constants: Math.PI, Math.E
+  if (expr === 'Math.PI' || expr === 'java.lang.Math.PI') {
+    return {
+      id: `pi_${seq}`,
+      type: 'math_java_constants',
+      category: 'math',
+      title: 'π',
+      fields: { CONSTANT: 'PI' },
+    };
+  }
+  if (expr === 'Math.E' || expr === 'java.lang.Math.E') {
+    return {
+      id: `e_${seq}`,
+      type: 'math_java_constants',
+      category: 'math',
+      title: 'e',
+      fields: { CONSTANT: 'E' },
     };
   }
 
@@ -4205,6 +4508,179 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
     };
   }
 
+  // Null Entity Literal: (Entity) null, (LivingEntity) null, null_entity
+  if (expr === 'null' || expr === '(Entity) null' || expr === '(LivingEntity) null' || expr === '(Player) null') {
+    return {
+      id: `null_ent_${seq}`,
+      type: 'entity_null',
+      category: 'entity',
+      title: 'No entity',
+    };
+  }
+
+  // Is Mod Loaded check: ModList.get().isLoaded(...) or FMLLoader.getLoadingModList().isLoaded(...)
+  if (expr.includes('.isLoaded(') || expr.includes('is_mod_loaded')) {
+    const modMatch = expr.match(/isLoaded\s*\(\s*["']?([^"')]+)["']?\s*\)/);
+    const modId = modMatch ? modMatch[1].trim() : 'forge';
+    return {
+      id: `mod_loaded_${seq}`,
+      type: 'is_mod_loaded',
+      category: 'advanced',
+      title: `Is the mod with ID "${modId}" loaded`,
+      values: [
+        { name: 'modid', block: { id: `text_mod_${seq}`, type: 'text', category: 'text', title: `"${modId}"`, fields: { TEXT: modId } } },
+      ],
+    };
+  }
+
+  // Procedure Return Value Call: SomeProcedure.execute(...)
+  if (/[A-Z][a-zA-Z0-9_]*Procedure\.execute/.test(expr) || expr.includes('procedure_retval_')) {
+    const procMatch = expr.match(/([A-Z][a-zA-Z0-9_]*Procedure)\.execute/);
+    const procName = procMatch ? procMatch[1].replace(/Procedure$/, '') : 'CustomProcedure';
+    return {
+      id: `proc_ret_${seq}`,
+      type: 'procedure_retval_number',
+      category: 'advanced',
+      title: `Call procedure and get return value ${procName}`,
+      fields: { procedure: procName },
+    };
+  }
+
+  // Text Functions: Substring, Contains, StartsWith, EndsWith, Trim, Upper/Lower
+  if (expr.includes('.substring(')) {
+    const subMatch = expr.match(/\.substring\s*\(([^,]+),([^)]+)\)/);
+    const fromStr = subMatch ? subMatch[1].trim() : '0';
+    const toStr = subMatch ? subMatch[2].trim() : '1';
+    const targetMatch = expr.match(/^([a-zA-Z0-9_.]+\(\)|[a-zA-Z0-9_.]+)\.substring/);
+    const targetStr = targetMatch ? targetMatch[1].trim() : 'text';
+    return {
+      id: `txt_sub_${seq}`,
+      type: 'text_substring',
+      category: 'text',
+      title: 'Substring',
+      values: [
+        { name: 'text', block: parseExpressionToAST(targetStr, seq * 10 + 1) },
+        { name: 'from', block: parseExpressionToAST(fromStr, seq * 10 + 2) },
+        { name: 'to', block: parseExpressionToAST(toStr, seq * 10 + 3) },
+      ],
+    };
+  }
+
+  if (expr.includes('.contains(') && !expr.includes('Tag') && !expr.includes('PersistentData')) {
+    const match = expr.match(/\.contains\s*\(([\s\S]+)\)/);
+    const paramStr = match ? match[1].trim() : 'str';
+    const targetMatch = expr.match(/^([a-zA-Z0-9_.]+\(\)|[a-zA-Z0-9_.]+)\.contains/);
+    const targetStr = targetMatch ? targetMatch[1].trim() : 'text';
+    return {
+      id: `txt_cnt_${seq}`,
+      type: 'text_contains',
+      category: 'text',
+      title: 'Does text contain',
+      values: [
+        { name: 'text', block: parseExpressionToAST(targetStr, seq * 10 + 1) },
+        { name: 'contains', block: parseExpressionToAST(paramStr, seq * 10 + 2) },
+      ],
+    };
+  }
+
+  if (expr.includes('.startsWith(')) {
+    const match = expr.match(/\.startsWith\s*\(([\s\S]+)\)/);
+    const paramStr = match ? match[1].trim() : 'str';
+    const targetMatch = expr.match(/^([a-zA-Z0-9_.]+\(\)|[a-zA-Z0-9_.]+)\.startsWith/);
+    const targetStr = targetMatch ? targetMatch[1].trim() : 'text';
+    return {
+      id: `txt_sw_${seq}`,
+      type: 'text_starts_with',
+      category: 'text',
+      title: 'Does text start with',
+      values: [
+        { name: 'text', block: parseExpressionToAST(targetStr, seq * 10 + 1) },
+        { name: 'startsWith', block: parseExpressionToAST(paramStr, seq * 10 + 2) },
+      ],
+    };
+  }
+
+  if (expr.includes('.endsWith(')) {
+    const match = expr.match(/\.endsWith\s*\(([\s\S]+)\)/);
+    const paramStr = match ? match[1].trim() : 'str';
+    const targetMatch = expr.match(/^([a-zA-Z0-9_.]+\(\)|[a-zA-Z0-9_.]+)\.endsWith/);
+    const targetStr = targetMatch ? targetMatch[1].trim() : 'text';
+    return {
+      id: `txt_ew_${seq}`,
+      type: 'text_ends_with',
+      category: 'text',
+      title: 'Does text end with',
+      values: [
+        { name: 'text', block: parseExpressionToAST(targetStr, seq * 10 + 1) },
+        { name: 'endsWith', block: parseExpressionToAST(paramStr, seq * 10 + 2) },
+      ],
+    };
+  }
+
+  if (expr.includes('.trim()')) {
+    const targetMatch = expr.match(/^([a-zA-Z0-9_.]+\(\)|[a-zA-Z0-9_.]+)\.trim\(\)/);
+    const targetStr = targetMatch ? targetMatch[1].trim() : 'text';
+    return {
+      id: `txt_trm_${seq}`,
+      type: 'text_trim',
+      category: 'text',
+      title: 'Trim text',
+      values: [
+        { name: 'text', block: parseExpressionToAST(targetStr, seq * 10 + 1) },
+      ],
+    };
+  }
+
+  if (expr.includes('.toUpperCase()')) {
+    const targetMatch = expr.match(/^([a-zA-Z0-9_.]+\(\)|[a-zA-Z0-9_.]+)\.toUpperCase\(\)/);
+    const targetStr = targetMatch ? targetMatch[1].trim() : 'text';
+    return {
+      id: `txt_uc_${seq}`,
+      type: 'text_change_case',
+      category: 'text',
+      title: 'Uppercase text',
+      fields: { CASE: 'UPPERCASE' },
+      values: [
+        { name: 'text', block: parseExpressionToAST(targetStr, seq * 10 + 1) },
+      ],
+    };
+  }
+
+  if (expr.includes('.toLowerCase()')) {
+    const targetMatch = expr.match(/^([a-zA-Z0-9_.]+\(\)|[a-zA-Z0-9_.]+)\.toLowerCase\(\)/);
+    const targetStr = targetMatch ? targetMatch[1].trim() : 'text';
+    return {
+      id: `txt_lc_${seq}`,
+      type: 'text_change_case',
+      category: 'text',
+      title: 'Lowercase text',
+      fields: { CASE: 'LOWERCASE' },
+      values: [
+        { name: 'text', block: parseExpressionToAST(targetStr, seq * 10 + 1) },
+      ],
+    };
+  }
+
+  // Date and Time expressions: Calendar.getInstance().get(...)
+  if (expr.includes('Calendar.getInstance()')) {
+    let timeType = 'time_seconds';
+    let timeTitle = 'Seconds past current minute';
+    if (expr.includes('Calendar.MINUTE')) { timeType = 'time_minutes'; timeTitle = 'Minutes past current hour'; }
+    else if (expr.includes('Calendar.HOUR')) { timeType = 'time_hours'; timeTitle = 'Current hour of day'; }
+    else if (expr.includes('Calendar.DAY_OF_WEEK')) { timeType = 'time_day_of_week'; timeTitle = 'Day of current week'; }
+    else if (expr.includes('Calendar.WEEK_OF_YEAR')) { timeType = 'time_week_of_year'; timeTitle = 'Week of current year'; }
+    else if (expr.includes('Calendar.DAY_OF_MONTH')) { timeType = 'time_day_of_month'; timeTitle = 'Day of current month'; }
+    else if (expr.includes('Calendar.MONTH')) { timeType = 'time_month'; timeTitle = 'Current month'; }
+    else if (expr.includes('Calendar.YEAR')) { timeType = 'time_year'; timeTitle = 'Current year'; }
+
+    return {
+      id: `tm_${seq}`,
+      type: timeType,
+      category: 'datetime',
+      title: timeTitle,
+    };
+  }
+
   // Unary NOT (!)
   if (expr.startsWith('!')) {
     const inner = expr.substring(1).trim();
@@ -4253,8 +4729,8 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
     }
   }
 
-  // Math.sin, Math.cos, Math.abs, Math.sqrt, Math.floor, Math.ceil, Math.round
-  const singleMathMatch = expr.match(/^Math\.(sin|cos|tan|abs|sqrt|floor|ceil|round)\(([\s\S]+)\)$/);
+  // Math unary functions: Math.sin, Math.cos, Math.tan, Math.asin, Math.acos, Math.atan, Math.abs, Math.sqrt, Math.cbrt, Math.floor, Math.ceil, Math.round, Math.log, Math.log10, Math.exp, Math.toDegrees, Math.toRadians
+  const singleMathMatch = expr.match(/^Math\.(sin|cos|tan|asin|acos|atan|abs|sqrt|cbrt|floor|ceil|round|log|log10|exp|toDegrees|toRadians|signum)\(([\s\S]+)\)$/);
   if (singleMathMatch) {
     const fn = singleMathMatch[1];
     const arg = singleMathMatch[2].trim();
@@ -4262,11 +4738,21 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
       sin: 'SIN',
       cos: 'COS',
       tan: 'TAN',
+      asin: 'ASIN',
+      acos: 'ACOS',
+      atan: 'ATAN',
       abs: 'ABS',
       sqrt: 'ROOT',
+      cbrt: 'CBRT',
       floor: 'ROUNDDOWN',
       ceil: 'ROUNDUP',
       round: 'ROUND',
+      log: 'LN',
+      log10: 'LOG10',
+      exp: 'EXP',
+      toDegrees: 'DEG',
+      toRadians: 'RAD',
+      signum: 'SIGN',
     };
     return {
       id: `math_s_${seq}`,
@@ -5478,8 +5964,9 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
   }
 
   // COORDINATES: target.getX(), getX(), x
-  if (expr.includes('.getX()')) {
-    const rawEnt = expr.replace(/\.getX\(\)/, '').trim();
+  const getXMatch = expr.match(/^([a-zA-Z0-9_().]+)?\.getX\(\)$/);
+  if (getXMatch) {
+    const rawEnt = (getXMatch[1] || '').trim();
     const entAST: BlockASTNode = (!rawEnt || rawEnt === 'entity' || rawEnt === 'player' || rawEnt === '_ent')
       ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
       : parseExpressionToAST(rawEnt, seq * 10 + 1);
@@ -5495,8 +5982,9 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
     return { id: `x_${seq}`, type: 'coord_x', category: 'world', title: 'x' };
   }
 
-  if (expr.includes('.getY()')) {
-    const rawEnt = expr.replace(/\.getY\(\)/, '').trim();
+  const getYMatch = expr.match(/^([a-zA-Z0-9_().]+)?\.getY\(\)$/);
+  if (getYMatch) {
+    const rawEnt = (getYMatch[1] || '').trim();
     const entAST: BlockASTNode = (!rawEnt || rawEnt === 'entity' || rawEnt === 'player' || rawEnt === '_ent')
       ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
       : parseExpressionToAST(rawEnt, seq * 10 + 1);
@@ -5512,8 +6000,9 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
     return { id: `y_${seq}`, type: 'coord_y', category: 'world', title: 'y' };
   }
 
-  if (expr.includes('.getZ()')) {
-    const rawEnt = expr.replace(/\.getZ\(\)/, '').trim();
+  const getZMatch = expr.match(/^([a-zA-Z0-9_().]+)?\.getZ\(\)$/);
+  if (getZMatch) {
+    const rawEnt = (getZMatch[1] || '').trim();
     const entAST: BlockASTNode = (!rawEnt || rawEnt === 'entity' || rawEnt === 'player' || rawEnt === '_ent')
       ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
       : parseExpressionToAST(rawEnt, seq * 10 + 1);
