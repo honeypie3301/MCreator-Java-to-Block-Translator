@@ -125,12 +125,48 @@ const MCREATOR_CATEGORY_THEMES: Record<
     badgeText: '#ffffff',
   },
   command: {
-    headerBg: '#546e7a',
-    bodyBg: '#455a64',
-    border: '#263238',
+    headerBg: '#815ba5',
+    bodyBg: '#684887',
+    border: '#4e3568',
     text: '#ffffff',
-    accent: '#90a4ae',
-    badgeBg: '#33434b',
+    accent: '#b18cd6',
+    badgeBg: '#4e3568',
+    badgeText: '#ffffff',
+  },
+  command_entry: {
+    headerBg: '#5ba55b',
+    bodyBg: '#4a894a',
+    border: '#3c6e3c',
+    text: '#ffffff',
+    accent: '#82d182',
+    badgeBg: '#3d723d',
+    badgeText: '#ffffff',
+  },
+  command_param: {
+    headerBg: '#815ba5',
+    bodyBg: '#684887',
+    border: '#4e3568',
+    text: '#ffffff',
+    accent: '#b18cd6',
+    badgeBg: '#4e3568',
+    badgeText: '#ffffff',
+  },
+  command_action: {
+    headerBg: '#805ba5',
+    bodyBg: '#684887',
+    border: '#4e3568',
+    text: '#ffffff',
+    accent: '#b18cd6',
+    badgeBg: '#4e3568',
+    badgeText: '#ffffff',
+  },
+  command_action_any: {
+    headerBg: '#5ba58c',
+    bodyBg: '#498671',
+    border: '#376454',
+    text: '#ffffff',
+    accent: '#88cbba',
+    badgeBg: '#3a6c5b',
     badgeText: '#ffffff',
   },
   feature: {
@@ -140,6 +176,51 @@ const MCREATOR_CATEGORY_THEMES: Record<
     text: '#ffffff',
     accent: '#4dd0e1',
     badgeBg: '#00484b',
+    badgeText: '#ffffff',
+  },
+  feature_blocks: {
+    headerBg: '#9fa55b',
+    bodyBg: '#878c48',
+    border: '#6e7235',
+    text: '#ffffff',
+    accent: '#d3d68c',
+    badgeBg: '#595c2b',
+    badgeText: '#ffffff',
+  },
+  feature_int_provider: {
+    headerBg: '#5b67a5',
+    bodyBg: '#485387',
+    border: '#353c64',
+    text: '#ffffff',
+    accent: '#8590c4',
+    badgeBg: '#39426f',
+    badgeText: '#ffffff',
+  },
+  feature_placement_common: {
+    headerBg: '#5ba570',
+    bodyBg: '#498a5b',
+    border: '#376d45',
+    text: '#ffffff',
+    accent: '#88cb9b',
+    badgeBg: '#2f5b3a',
+    badgeText: '#ffffff',
+  },
+  feature_placement_height: {
+    headerBg: '#5b9ea5',
+    bodyBg: '#48848a',
+    border: '#356a6f',
+    text: '#ffffff',
+    accent: '#88c2cb',
+    badgeBg: '#2d575c',
+    badgeText: '#ffffff',
+  },
+  feature_placement_conditional: {
+    headerBg: '#5b7aa5',
+    bodyBg: '#48668a',
+    border: '#354e6f',
+    text: '#ffffff',
+    accent: '#88a3cb',
+    badgeBg: '#2d415c',
     badgeText: '#ffffff',
   },
   text: {
@@ -527,6 +608,37 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
 /*                 MCreator Blockly Visual Node Component                     */
 /* -------------------------------------------------------------------------- */
 
+const getBlockTheme = (node: BlockASTNode) => {
+  if (node.type === 'args_start' || node.type === 'command_trigger') {
+    return MCREATOR_CATEGORY_THEMES.command_entry;
+  }
+  if (
+    ['literal', 'literal_parameter', 'number_default', 'number_min', 'number_min_max', 'entity', 'blockpos', 'blockstate', 'item', 'logic', 'string', 'message', 'resource_location'].includes(node.type) ||
+    node.type.endsWith('_parameter') ||
+    node.category === 'command_param'
+  ) {
+    return MCREATOR_CATEGORY_THEMES.command_param;
+  }
+  if (node.type === 'call_procedure') {
+    return MCREATOR_CATEGORY_THEMES.command_action;
+  }
+  if (node.type === 'call_procedure_any') {
+    return MCREATOR_CATEGORY_THEMES.command_action_any;
+  }
+  if (node.category === 'feature_blocks' || node.type.startsWith('blockstate_') || node.type === 'block_tag' || node.type === 'block_list') {
+    return MCREATOR_CATEGORY_THEMES.feature_blocks;
+  }
+  if (node.category === 'feature_int_provider' || node.type.startsWith('int_provider_')) {
+    return MCREATOR_CATEGORY_THEMES.feature_int_provider;
+  }
+  if (node.category === 'feature_placement_common' || node.type.startsWith('placement_common') || node.type.startsWith('placement_')) {
+    if (node.type.includes('height')) return MCREATOR_CATEGORY_THEMES.feature_placement_height;
+    if (node.type.includes('conditional') || node.type.includes('filter')) return MCREATOR_CATEGORY_THEMES.feature_placement_conditional;
+    return MCREATOR_CATEGORY_THEMES.feature_placement_common;
+  }
+  return MCREATOR_CATEGORY_THEMES[node.category] || MCREATOR_CATEGORY_THEMES.control;
+};
+
 const BlocklyNodeRenderer: React.FC<{
   node: BlockASTNode;
   eventTrigger?: string;
@@ -535,7 +647,7 @@ const BlocklyNodeRenderer: React.FC<{
   selectedBlockId?: string | null;
   onSelectBlock?: (id: string, line?: number) => void;
 }> = React.memo(({ node, eventTrigger, inputLayoutMode = 'auto', selectedLineNumber, selectedBlockId, onSelectBlock }) => {
-  const theme = MCREATOR_CATEGORY_THEMES[node.category] || MCREATOR_CATEGORY_THEMES.control;
+  const theme = getBlockTheme(node);
   const isSelected = checkIsNodeSelected(node, selectedLineNumber, selectedBlockId);
   const isExternal = shouldUseExternalInputs(node, inputLayoutMode);
   const nodeRef = useRef<HTMLDivElement>(null);
@@ -2695,7 +2807,7 @@ const InlineValueBlock: React.FC<{
   selectedBlockId?: string | null;
   onSelectBlock?: (id: string, line?: number) => void;
 }> = React.memo(({ node, inputLayoutMode = 'auto', selectedLineNumber, selectedBlockId, onSelectBlock }) => {
-  const theme = MCREATOR_CATEGORY_THEMES[node.category] || MCREATOR_CATEGORY_THEMES.math;
+  const theme = getBlockTheme(node);
   const isSelected = checkIsNodeSelected(node, selectedLineNumber, selectedBlockId);
   const isExternal = shouldUseExternalInputs(node, inputLayoutMode);
 

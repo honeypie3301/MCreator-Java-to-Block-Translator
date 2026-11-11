@@ -62,7 +62,7 @@ export const Header: React.FC<HeaderProps> = ({
           align="left"
           options={[
             { value: 'procedure', label: 'Procedure (.ptpl)', description: 'Event listener & procedural logic' },
-            { value: 'ai_task', label: 'AI Goal / Task (.aitpl)', description: 'Entity AI pathfinding & behavior' },
+            { value: 'ai_task', label: 'Entity AI Goals (.aitpl)', description: 'Extracts registerGoals() from Entity Java' },
             { value: 'command', label: 'Command (.cmdtpl)', description: 'Chat & console command listener' },
             { value: 'feature', label: 'Feature (.ftpl)', description: 'Worldgen feature placement' },
           ]}

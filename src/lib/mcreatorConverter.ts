@@ -169,11 +169,19 @@ export function translateJavaToMCreator(
     }
 
     if (!activeMethod) {
-      if (realExecuteMethod && realExecuteMethod.body.length > 20) {
-        activeMethod = realExecuteMethod;
-      } else {
-        // Prioritize method with largest body
-        activeMethod = [...detectedMethods].sort((a, b) => b.body.length - a.body.length)[0];
+      if (elementType === 'ai_task') {
+        const goalsMethod = detectedMethods.find(m => m.name === 'registerGoals' || m.body.includes('goalSelector') || m.body.includes('Goal'));
+        if (goalsMethod) {
+          activeMethod = goalsMethod;
+        }
+      }
+      if (!activeMethod) {
+        if (realExecuteMethod && realExecuteMethod.body.length > 20) {
+          activeMethod = realExecuteMethod;
+        } else {
+          // Prioritize method with largest body
+          activeMethod = [...detectedMethods].sort((a, b) => b.body.length - a.body.length)[0];
+        }
       }
     }
 
@@ -241,9 +249,6 @@ export function translateJavaToMCreator(
     } else if (detectedEventTrigger === 'right_clicked_item') {
       dependencies.add('itemstack');
     }
-  } else if (elementType === 'ai_task') {
-    detectedEventTrigger = 'aitask_wrapper';
-    dependencies.add('entity');
   } else if (elementType === 'command') {
     detectedEventTrigger = 'command_trigger';
     dependencies.add('entity');
@@ -278,12 +283,20 @@ export function translateJavaToMCreator(
       statements: [],
     };
   } else if (elementType === 'command') {
+    const cmdNameMatch = code.match(/Commands\.literal\s*\(\s*"([^"]+)"\s*\)/);
+    const cmdName = cmdNameMatch ? cmdNameMatch[1] : 'customcommand';
+    const permMatch = code.match(/hasPermission\s*\(\s*([0-9]+)\s*\)/);
+    const permLevel = permMatch ? permMatch[1] : '2';
+
     rootNode = {
       id: 'root_cmd',
-      type: 'command_trigger',
+      type: 'args_start',
       category: 'command',
-      title: 'Mod Command Listener',
-      fields: { command_name: 'customcommand' },
+      title: 'Command entry point',
+      fields: {
+        command_name: cmdName,
+        permission_level: permLevel,
+      },
       statements: [],
     };
   } else {
@@ -380,6 +393,13 @@ export function translateJavaToMCreator(
   // Connect nodes linearly or in statements
   if (elementType === 'ai_task') {
     rootNode.statements = [{ name: 'tasks', block: nodes.length > 0 ? chainNodes(nodes) : undefined }];
+  } else if (elementType === 'command') {
+    const commandNodes = parseCommandStructureFromJava(code, breakdown);
+    rootNode.statements = [{ name: 'args', block: commandNodes.length > 0 ? chainNodes(commandNodes) : undefined }];
+    rootNode.next = undefined;
+  } else if (elementType === 'feature') {
+    const featNode = parseFeatureStructureFromJava(code, breakdown);
+    rootNode = featNode;
   } else if (nodes.length > 0) {
     rootNode.next = chainNodes(nodes);
   } else {
@@ -1849,6 +1869,34 @@ function parseJavaStatementInternal(
     return null;
   }
 
+  // Filter out entity registerGoals boilerplate for ai_task
+  if (elementType === 'ai_task') {
+    if (
+      trimmedStmt.startsWith('super.registerGoals') ||
+      trimmedStmt.includes('getNodeEvaluator()') ||
+      trimmedStmt.includes('setCanOpenDoors') ||
+      trimmedStmt.includes('setCanFloat')
+    ) {
+      return null;
+    }
+  }
+
+  // Filter out command registration boilerplate for command
+  if (elementType === 'command') {
+    if (
+      trimmedStmt.includes('arguments.getSource()') ||
+      trimmedStmt.includes('FakePlayerFactory') ||
+      trimmedStmt.includes('RegisterCommandsEvent') ||
+      trimmedStmt.includes('getDispatcher()') ||
+      trimmedStmt.startsWith('event.getDispatcher') ||
+      trimmedStmt.startsWith('Commands.') ||
+      trimmedStmt.startsWith('return 0') ||
+      trimmedStmt.startsWith('return')
+    ) {
+      return null;
+    }
+  }
+
   // ServerLevel guard unwrapper or direct spawn statement
   const isServerLevelOnlyWrapper = (
     trimmedStmt.startsWith('if (world instanceof ServerLevel') ||
@@ -2027,9 +2075,11 @@ function parseJavaStatementInternal(
     return parseWhileStatement(stmt, idSeq, variables, breakdown, elementType);
   }
 
-  // 4. AI TASK GOAL ADDITIONS: goalSelector.addGoal(...) or targetSelector.addGoal(...)
-  if (stmt.includes('goalSelector.addGoal') || stmt.includes('targetSelector.addGoal')) {
-    return parseAIGoalStatement(stmt, idSeq, breakdown);
+  // 4. AI TASK GOAL ADDITIONS: goalSelector.addGoal(...) or targetSelector.addGoal(...) or elementType === 'ai_task'
+  if (elementType === 'ai_task' || stmt.includes('goalSelector.addGoal') || stmt.includes('targetSelector.addGoal') || stmt.includes('Goal(') || stmt.includes('Goal>')) {
+    if (stmt.includes('goalSelector') || stmt.includes('targetSelector') || stmt.includes('Goal') || elementType === 'ai_task') {
+      return parseAIGoalStatement(stmt, idSeq, breakdown);
+    }
   }
 
   // 5. RETURN STATEMENTS: return [expr];
@@ -4144,17 +4194,94 @@ function parseAIGoalStatement(
   idSeq: number,
   breakdown: { javaLine: string; mcreatorBlock: string; explanation: string }[]
 ): BlockASTNode {
-  if (stmt.includes('PanicGoal')) {
-    breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_panic', explanation: 'Panic when attacked AI goal' });
+  // 1. Avoid Entity Goal
+  if (stmt.includes('AvoidEntityGoal')) {
+    const entityMatch = stmt.match(/([A-Z][A-Za-z0-9_]*Entity)\.class/);
+    const entityType = entityMatch ? entityMatch[1].replace('Entity', '') : 'Player';
+    const numbers = stmt.match(/[-+]?[0-9]*\.?[0-9]+/g) || [];
+    const radius = numbers[1] || '16';
+    const nearSpeed = numbers[2] || '1.0';
+    const farSpeed = numbers[3] || '1.2';
+
+    breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_avoid_entity', explanation: `Avoid living entity of type ${entityType} in radius ${radius}` });
     return {
-      id: `ai_panic_${idSeq}`,
-      type: 'aitask_panic',
+      id: `ai_avoid_${idSeq}`,
+      type: 'aitask_avoid_entity',
       category: 'ai',
-      title: 'Panic when attacked',
-      values: [{ name: 'speed', block: { id: `spd_${idSeq}`, type: 'math_number', category: 'math', title: '1.25', fields: { NUM: '1.25' } } }],
+      title: `Avoid entity (${entityType})`,
+      fields: { entity: entityType },
+      values: [
+        { name: 'radius', block: { id: `rad_${idSeq}`, type: 'math_number', category: 'math', title: radius, fields: { NUM: radius } } },
+        { name: 'walkSpeed', block: { id: `ws_${idSeq}`, type: 'math_number', category: 'math', title: nearSpeed, fields: { NUM: nearSpeed } } },
+        { name: 'sprintSpeed', block: { id: `ss_${idSeq}`, type: 'math_number', category: 'math', title: farSpeed, fields: { NUM: farSpeed } } },
+      ],
     };
   }
 
+  // 2. Nearest Attackable Target Goal
+  if (stmt.includes('NearestAttackableTargetGoal') || stmt.includes('TargetGoal')) {
+    const entityMatch = stmt.match(/([A-Z][A-Za-z0-9_]*)\.class/);
+    const entityType = entityMatch ? entityMatch[1] : 'Player';
+    breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_target_nearest', explanation: `Target nearest attackable ${entityType} goal` });
+    return {
+      id: `ai_tgt_near_${idSeq}`,
+      type: 'aitask_target_nearest',
+      category: 'ai',
+      title: `Target nearest ${entityType}`,
+      fields: { entity: entityType, checkSight: 'true' },
+    };
+  }
+
+  // 3. Melee Attack Goal
+  if (stmt.includes('MeleeAttackGoal')) {
+    const spdMatch = stmt.match(/([0-9]+\.[0-9]+)/);
+    const speed = spdMatch ? spdMatch[1] : '1.2';
+    breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_attack_on_collide', explanation: `Melee attack on collide with speed factor ${speed}` });
+    return {
+      id: `ai_melee_${idSeq}`,
+      type: 'aitask_attack_on_collide',
+      category: 'ai',
+      title: 'Melee attack on collide',
+      values: [{ name: 'speed', block: { id: `spd_${idSeq}`, type: 'math_number', category: 'math', title: speed, fields: { NUM: speed } } }],
+      fields: { longmemory: 'false' },
+    };
+  }
+
+  // 4. Open Door Goal
+  if (stmt.includes('OpenDoorGoal')) {
+    breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_open_doors', explanation: 'Open doors AI goal' });
+    return {
+      id: `ai_opendoors_${idSeq}`,
+      type: 'aitask_open_doors',
+      category: 'ai',
+      title: 'Open doors',
+      fields: { closeDoor: stmt.includes('false') ? 'false' : 'true' },
+    };
+  }
+
+  // 5. Break Door Goal
+  if (stmt.includes('BreakDoorGoal')) {
+    breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_doors_break', explanation: 'Break doors AI goal' });
+    return {
+      id: `ai_breakdoors_${idSeq}`,
+      type: 'aitask_doors_break',
+      category: 'ai',
+      title: 'Break doors',
+    };
+  }
+
+  // 6. Float Goal / Swim
+  if (stmt.includes('FloatGoal')) {
+    breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_swim', explanation: 'Float in water goal' });
+    return {
+      id: `ai_swim_${idSeq}`,
+      type: 'aitask_swim',
+      category: 'ai',
+      title: 'Float in water',
+    };
+  }
+
+  // 7. Water Avoiding Random Stroll
   if (stmt.includes('WaterAvoidingRandomStrollGoal')) {
     breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_wander_avoid_water', explanation: 'Wander avoiding water AI goal' });
     return {
@@ -4162,10 +4289,11 @@ function parseAIGoalStatement(
       type: 'aitask_wander_avoid_water',
       category: 'ai',
       title: 'Wander avoiding water',
-      values: [{ name: 'speed', block: { id: `spd_${idSeq}`, type: 'math_number', category: 'math', title: '1.0', fields: { NUM: '1.0' } } }],
+      values: [{ name: 'speed', block: { id: `spd_${idSeq}`, type: 'math_number', category: 'math', title: '0.8', fields: { NUM: '0.8' } } }],
     };
   }
 
+  // 8. Random Stroll
   if (stmt.includes('RandomStrollGoal')) {
     breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_wander', explanation: 'Wander around AI goal' });
     return {
@@ -4173,22 +4301,11 @@ function parseAIGoalStatement(
       type: 'aitask_wander',
       category: 'ai',
       title: 'Wander around',
-      values: [{ name: 'speed', block: { id: `spd_${idSeq}`, type: 'math_number', category: 'math', title: '1.0', fields: { NUM: '1.0' } } }],
+      values: [{ name: 'speed', block: { id: `spd_${idSeq}`, type: 'math_number', category: 'math', title: '0.8', fields: { NUM: '0.8' } } }],
     };
   }
 
-  if (stmt.includes('MeleeAttackGoal')) {
-    breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_attack_on_collide', explanation: 'Melee attack on collide AI goal' });
-    return {
-      id: `ai_melee_${idSeq}`,
-      type: 'aitask_attack_on_collide',
-      category: 'ai',
-      title: 'Melee attack on collide',
-      values: [{ name: 'speed', block: { id: `spd_${idSeq}`, type: 'math_number', category: 'math', title: '1.2', fields: { NUM: '1.2' } } }],
-      fields: { longmemory: 'false' },
-    };
-  }
-
+  // 9. Look At Player
   if (stmt.includes('LookAtPlayerGoal')) {
     breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_look_at', explanation: 'Look at player AI goal' });
     return {
@@ -4201,6 +4318,7 @@ function parseAIGoalStatement(
     };
   }
 
+  // 10. Random Look Around
   if (stmt.includes('RandomLookAroundGoal')) {
     breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_look_around', explanation: 'Look around randomly AI goal' });
     return {
@@ -4211,38 +4329,19 @@ function parseAIGoalStatement(
     };
   }
 
-  if (stmt.includes('NearestAttackableTargetGoal')) {
-    breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_target_nearest', explanation: 'Target nearest attackable entity goal' });
-    return {
-      id: `ai_tgt_near_${idSeq}`,
-      type: 'aitask_target_nearest',
-      category: 'ai',
-      title: 'Target nearest entity',
-      fields: { entity: 'Player', checkSight: 'true' },
-    };
-  }
-
+  // 11. Hurt By Target
   if (stmt.includes('HurtByTargetGoal')) {
-    breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_target_hurt_by', explanation: 'Target attacker when hurt goal' });
+    breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_target_hurt_by', explanation: 'Fight attacker mobs back goal' });
     return {
       id: `ai_hurt_by_${idSeq}`,
       type: 'aitask_target_hurt_by',
       category: 'ai',
-      title: 'Target attacker when hurt',
-      fields: { callForHelp: 'false' },
+      title: 'Fight attacker mobs back',
+      fields: { callForHelp: 'true' },
     };
   }
 
-  if (stmt.includes('FloatGoal')) {
-    breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_swim', explanation: 'Float in water goal' });
-    return {
-      id: `ai_swim_${idSeq}`,
-      type: 'aitask_swim',
-      category: 'ai',
-      title: 'Float in water',
-    };
-  }
-
+  // 12. Leap At Target
   if (stmt.includes('LeapAtTargetGoal')) {
     breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_leap_at_target', explanation: 'Leap at target goal' });
     return {
@@ -4250,22 +4349,34 @@ function parseAIGoalStatement(
       type: 'aitask_leap_at_target',
       category: 'ai',
       title: 'Leap at target',
-      values: [{ name: 'height', block: { id: `h_${idSeq}`, type: 'math_number', category: 'math', title: '0.4', fields: { NUM: '0.4' } } }],
+      values: [{ name: 'speed', block: { id: `h_${idSeq}`, type: 'math_number', category: 'math', title: '0.5', fields: { NUM: '0.5' } } }],
     };
   }
 
-  if (stmt.includes('AvoidEntityGoal')) {
-    breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_avoid_entity', explanation: 'Avoid entity goal' });
+  // 13. Breed
+  if (stmt.includes('BreedGoal')) {
+    breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_breed', explanation: 'Breed, find partner goal' });
     return {
-      id: `ai_avoid_${idSeq}`,
-      type: 'aitask_avoid_entity',
+      id: `ai_breed_${idSeq}`,
+      type: 'aitask_breed',
       category: 'ai',
-      title: 'Avoid entity',
-      fields: { entity: 'Player' },
+      title: 'Breed, find partner',
+      values: [{ name: 'speed', block: { id: `spd_${idSeq}`, type: 'math_number', category: 'math', title: '1.0', fields: { NUM: '1.0' } } }],
+    };
+  }
+
+  // 14. Follow Owner
+  if (stmt.includes('FollowOwnerGoal')) {
+    breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_follow_owner', explanation: 'Follow owner goal' });
+    return {
+      id: `ai_fol_owner_${idSeq}`,
+      type: 'aitask_follow_owner',
+      category: 'ai',
+      title: 'Follow owner',
       values: [
-        { name: 'radius', block: { id: `rad_${idSeq}`, type: 'math_number', category: 'math', title: '16', fields: { NUM: '16' } } },
-        { name: 'walkSpeed', block: { id: `ws_${idSeq}`, type: 'math_number', category: 'math', title: '1.0', fields: { NUM: '1.0' } } },
-        { name: 'sprintSpeed', block: { id: `ss_${idSeq}`, type: 'math_number', category: 'math', title: '1.3', fields: { NUM: '1.3' } } },
+        { name: 'speed', block: { id: `spd_${idSeq}`, type: 'math_number', category: 'math', title: '1.0', fields: { NUM: '1.0' } } },
+        { name: 'minDistance', block: { id: `min_${idSeq}`, type: 'math_number', category: 'math', title: '10', fields: { NUM: '10' } } },
+        { name: 'maxDistance', block: { id: `max_${idSeq}`, type: 'math_number', category: 'math', title: '2', fields: { NUM: '2' } } },
       ],
     };
   }
@@ -7342,4 +7453,446 @@ function getNeoForgeVersionInfo(version: NeoForgeVersion): TranslationResult['ne
         ],
       };
   }
+}
+
+
+function parseCommandStructureFromJava(
+  code: string,
+  breakdown: TranslationBreakdownItem[]
+): BlockASTNode[] {
+  let idSeq = 1;
+
+  const cmdMatch = code.match(/Commands\.literal\s*\(\s*"([^"]+)"\s*\)([\s\S]*)/);
+  if (!cmdMatch) {
+    return [];
+  }
+
+  const chainBody = cmdMatch[2];
+
+  // Helper function to extract top-level .then(...) and .executes(...) items from a chain body
+  function extractTopChainItems(text: string): { type: 'then' | 'executes'; inner: string }[] {
+    const results: { type: 'then' | 'executes'; inner: string }[] = [];
+    let idx = 0;
+    while (idx < text.length) {
+      const thenIdx = text.indexOf('.then', idx);
+      const execIdx = text.indexOf('.executes', idx);
+
+      let nextType: 'then' | 'executes' | null = null;
+      let targetIdx = -1;
+
+      if (thenIdx !== -1 && (execIdx === -1 || thenIdx < execIdx)) {
+        nextType = 'then';
+        targetIdx = thenIdx;
+      } else if (execIdx !== -1) {
+        nextType = 'executes';
+        targetIdx = execIdx;
+      } else {
+        break;
+      }
+
+      const openParen = text.indexOf('(', targetIdx);
+      if (openParen === -1) break;
+
+      let depth = 1;
+      let endParen = -1;
+      for (let i = openParen + 1; i < text.length; i++) {
+        if (text[i] === '(') depth++;
+        else if (text[i] === ')') depth--;
+        if (depth === 0) {
+          endParen = i;
+          break;
+        }
+      }
+
+      if (endParen === -1) break;
+
+      const inner = text.substring(openParen + 1, endParen);
+      results.push({ type: nextType, inner });
+      idx = endParen + 1;
+    }
+    return results;
+  }
+
+  // Recursive parser to build AST nodes from a .then(...) inner segment
+  function parseChain(segment: string): BlockASTNode[] {
+    const nodes: BlockASTNode[] = [];
+
+    const litMatch = segment.match(/^Commands\.literal\s*\(\s*"([^"]+)"\s*\)/);
+    const argMatch = segment.match(/^Commands\.argument\s*\(\s*"([^"]+)"\s*,\s*([\s\S]+?)\)/);
+
+    if (litMatch) {
+      const name = litMatch[1];
+      const rest = segment.substring(litMatch[0].length);
+      const subItems = extractTopChainItems(rest);
+
+      let childNode: BlockASTNode | undefined;
+      let actionNode: BlockASTNode | undefined;
+      const childThenItems: string[] = [];
+
+      for (const item of subItems) {
+        if (item.type === 'then') {
+          childThenItems.push(item.inner);
+        } else if (item.type === 'executes') {
+          const procMatch = item.inner.match(/([A-Z][A-Za-z0-9_]*?)Procedure\.execute/);
+          if (procMatch) {
+            const procName = procMatch[1];
+            actionNode = {
+              id: `cmd_act_${idSeq++}`,
+              type: 'call_procedure',
+              category: 'command',
+              title: `Call procedure ${procName}`,
+              fields: { procedure: procName },
+            };
+          }
+        }
+      }
+
+      if (childThenItems.length > 0) {
+        const parsedChildren: BlockASTNode[] = [];
+        for (const childItem of childThenItems) {
+          const res = parseChain(childItem);
+          parsedChildren.push(...res);
+        }
+        if (parsedChildren.length > 1) {
+          for (let i = 0; i < parsedChildren.length - 1; i++) {
+            parsedChildren[i].next = parsedChildren[i + 1];
+          }
+        }
+        childNode = parsedChildren[0];
+      } else if (actionNode) {
+        childNode = actionNode;
+      }
+
+      breakdown.push({
+        javaLine: `Commands.literal("${name}")`,
+        mcreatorBlock: 'literal',
+        explanation: `Literal parameter '${name}'`,
+      });
+
+      nodes.push({
+        id: `cmd_param_${idSeq++}`,
+        type: 'literal',
+        category: 'command',
+        title: `Literal parameter ${name}`,
+        fields: { name },
+        statements: childNode ? [{ name: 'args', block: childNode }] : undefined,
+      });
+
+    } else if (argMatch) {
+      const name = argMatch[1];
+      const argTypeStr = argMatch[2];
+      const rest = segment.substring(argMatch[0].length);
+      const subItems = extractTopChainItems(rest);
+
+      // Check for greedyString or "arguments" parameter
+      if (name === 'arguments' || argTypeStr.includes('greedyString')) {
+        let procName: string | undefined;
+        for (const item of subItems) {
+          if (item.type === 'executes') {
+            const pm = item.inner.match(/([A-Z][A-Za-z0-9_]*?)Procedure\.execute/);
+            if (pm) procName = pm[1];
+          }
+        }
+        if (!procName) {
+          const pm = segment.match(/([A-Z][A-Za-z0-9_]*?)Procedure\.execute/);
+          if (pm) procName = pm[1];
+        }
+        if (procName) {
+          breakdown.push({
+            javaLine: `Commands.argument("${name}", greedyString())`,
+            mcreatorBlock: 'call_procedure_any',
+            explanation: `Accept any parameter and call procedure '${procName}'`,
+          });
+          nodes.push({
+            id: `cmd_act_${idSeq++}`,
+            type: 'call_procedure_any',
+            category: 'command',
+            title: `Accept any parameter and call procedure ${procName}`,
+            fields: { procedure: procName },
+          });
+          return nodes;
+        }
+      }
+
+      let blockType = 'number_default';
+      let titlePrefix = 'Number';
+
+      if (argTypeStr.includes('EntityArgument')) {
+        blockType = 'entity';
+        titlePrefix = 'Entity';
+      } else if (argTypeStr.includes('DoubleArgument') || argTypeStr.includes('IntegerArgument') || argTypeStr.includes('FloatArgument')) {
+        blockType = 'number_default';
+        titlePrefix = 'Number';
+      } else if (argTypeStr.includes('BlockPosArgument')) {
+        blockType = 'blockpos';
+        titlePrefix = 'Block position';
+      } else if (argTypeStr.includes('BlockStateArgument')) {
+        blockType = 'blockstate';
+        titlePrefix = 'Block state';
+      } else if (argTypeStr.includes('ItemArgument')) {
+        blockType = 'item';
+        titlePrefix = 'Item';
+      } else if (argTypeStr.includes('BoolArgument')) {
+        blockType = 'logic';
+        titlePrefix = 'Logic';
+      } else if (argTypeStr.includes('StringArgument')) {
+        blockType = 'string';
+        titlePrefix = 'String';
+      }
+
+      let childNode: BlockASTNode | undefined;
+      let actionNode: BlockASTNode | undefined;
+      const childThenItems: string[] = [];
+
+      for (const item of subItems) {
+        if (item.type === 'then') {
+          childThenItems.push(item.inner);
+        } else if (item.type === 'executes') {
+          const procMatch = item.inner.match(/([A-Z][A-Za-z0-9_]*?)Procedure\.execute/);
+          if (procMatch) {
+            const procName = procMatch[1];
+            actionNode = {
+              id: `cmd_act_${idSeq++}`,
+              type: 'call_procedure',
+              category: 'command',
+              title: `Call procedure ${procName}`,
+              fields: { procedure: procName },
+            };
+          }
+        }
+      }
+
+      if (childThenItems.length > 0) {
+        const parsedChildren: BlockASTNode[] = [];
+        for (const childItem of childThenItems) {
+          const res = parseChain(childItem);
+          parsedChildren.push(...res);
+        }
+        if (parsedChildren.length > 1) {
+          for (let i = 0; i < parsedChildren.length - 1; i++) {
+            parsedChildren[i].next = parsedChildren[i + 1];
+          }
+        }
+        childNode = parsedChildren[0];
+      } else if (actionNode) {
+        childNode = actionNode;
+      }
+
+      const paramFields: Record<string, string> = { name };
+      let paramTitle = `${titlePrefix} parameter ${name}`;
+      if (blockType === 'entity') {
+        const entType = argTypeStr.includes('entities()')
+          ? 'multiple entities'
+          : argTypeStr.includes('players()')
+          ? 'multiple players'
+          : argTypeStr.includes('player()')
+          ? 'one player'
+          : 'one entity';
+        paramFields.type = entType;
+        paramTitle = `Entity parameter ${name} for ${entType}`;
+      }
+
+      nodes.push({
+        id: `cmd_param_${idSeq++}`,
+        type: blockType,
+        category: 'command',
+        title: paramTitle,
+        fields: paramFields,
+        statements: childNode ? [{ name: 'args', block: childNode }] : undefined,
+      });
+    }
+
+    return nodes;
+  }
+
+  const topItems = extractTopChainItems(chainBody);
+  const rootChildren: BlockASTNode[] = [];
+
+  for (const item of topItems) {
+    if (item.type === 'then') {
+      const childNodes = parseChain(item.inner);
+      rootChildren.push(...childNodes);
+    }
+  }
+
+  if (rootChildren.length > 1) {
+    for (let i = 0; i < rootChildren.length - 1; i++) {
+      rootChildren[i].next = rootChildren[i + 1];
+    }
+  }
+
+  return rootChildren;
+}
+
+function parseFeatureStructureFromJava(
+  code: string,
+  breakdown: TranslationBreakdownItem[]
+): BlockASTNode {
+  let idSeq = 1;
+
+  let featureType = 'feature_geode_simple';
+  let featureTitle = 'Geode feature';
+  let featureCategory: BlockCategory = 'feature_blocks';
+
+  if (code.includes('OreConfiguration') || code.includes('Feature.ORE') || code.includes('TargetBlockState')) {
+    featureType = 'feature_ore';
+    featureTitle = 'Ore feature';
+    featureCategory = 'feature_ore' as BlockCategory;
+  } else if (code.includes('TreeConfiguration') || code.includes('Feature.TREE') || code.includes('TrunkPlacer')) {
+    featureType = 'feature_tree_simple';
+    featureTitle = 'Simple tree feature';
+    featureCategory = 'feature_tree' as BlockCategory;
+  } else if (code.includes('RandomPatchFeature') || code.includes('SimpleBlockFeature')) {
+    featureType = 'feature_random_patch_simple';
+    featureTitle = 'Random patch feature';
+    featureCategory = 'feature_blocks';
+  } else if (code.includes('DiskFeature') || code.includes('DiskConfiguration')) {
+    featureType = 'feature_disk_simple';
+    featureTitle = 'Simple disk feature';
+    featureCategory = 'feature_blocks';
+  }
+
+  const blockMatches = Array.from(code.matchAll(/(?:Blocks|CUSTOM)\.([A-Za-z0-9_]+)/g)).map(m => m[1]);
+  const primaryBlock = blockMatches[0] ? `CUSTOM:${blockMatches[0]}` : 'Blocks.AIR';
+
+  const makeBlockSelector = (bName: string) => ({
+    id: `blk_sel_${idSeq++}`,
+    type: 'blockstate_selector',
+    category: 'feature_blocks' as BlockCategory,
+    title: bName,
+    fields: { block: bName },
+  });
+
+  const values: { name: string; block?: BlockASTNode }[] = [
+    { name: 'filling', block: makeBlockSelector('Blocks.AIR') },
+    { name: 'inner_layer', block: makeBlockSelector(primaryBlock) },
+    { name: 'alternate_inner_layer', block: makeBlockSelector(primaryBlock) },
+    { name: 'middle_layer', block: makeBlockSelector(primaryBlock) },
+    { name: 'outer_layer', block: makeBlockSelector(primaryBlock) },
+  ];
+
+  breakdown.push({
+    javaLine: `Feature configuration (${featureTitle})`,
+    mcreatorBlock: featureType,
+    explanation: `Configured feature '${featureTitle}' with block '${primaryBlock}'`,
+  });
+
+  const featureNode: BlockASTNode = {
+    id: 'feat_root_block',
+    type: featureType,
+    category: featureCategory,
+    title: featureTitle,
+    values,
+  };
+
+  const placements: BlockASTNode[] = [];
+
+  const rarityMatch = code.match(/RarityFilter\.onAverageOnceEvery\s*\(\s*([0-9]+)\s*\)/);
+  if (rarityMatch) {
+    const rVal = rarityMatch[1];
+    placements.push({
+      id: `pl_rarity_${idSeq++}`,
+      type: 'placement_rarity',
+      category: 'feature_placement_common',
+      title: 'Rarity placement',
+      fields: { rarity: rVal },
+    });
+  }
+
+  const countUniformMatch = code.match(/UniformInt\.of\s*\(\s*([0-9]+)\s*,\s*([0-9]+)\s*\)/);
+  const countConstMatch = code.match(/ConstantInt\.of\s*\(\s*([0-9]+)\s*\)/);
+  if (countUniformMatch) {
+    placements.push({
+      id: `pl_count_${idSeq++}`,
+      type: 'placement_count',
+      category: 'feature_placement_common',
+      title: 'Count placement',
+      values: [{
+        name: 'count',
+        block: {
+          id: `int_unif_${idSeq++}`,
+          type: 'int_provider_uniform',
+          category: 'feature_int_provider',
+          title: 'Uniform integer provider',
+          fields: { min: countUniformMatch[1], max: countUniformMatch[2] },
+        },
+      }],
+    });
+  } else if (countConstMatch) {
+    placements.push({
+      id: `pl_count_${idSeq++}`,
+      type: 'placement_count',
+      category: 'feature_placement_common',
+      title: 'Count placement',
+      values: [{
+        name: 'count',
+        block: {
+          id: `int_const_${idSeq++}`,
+          type: 'int_provider_constant',
+          category: 'feature_int_provider',
+          title: 'Constant integer provider',
+          fields: { value: countConstMatch[1] },
+        },
+      }],
+    });
+  }
+
+  if (code.includes('InSquarePlacement')) {
+    placements.push({
+      id: `pl_sq_${idSeq++}`,
+      type: 'placement_in_square',
+      category: 'feature_placement_common',
+      title: 'In square placement',
+    });
+  }
+
+  const heightMatch = code.match(/HeightRangePlacement\.uniform\s*\(\s*VerticalAnchor\.absolute\s*\(\s*([0-9\-]+)\s*\)\s*,\s*VerticalAnchor\.absolute\s*\(\s*([0-9\-]+)\s*\)/);
+  if (heightMatch) {
+    placements.push({
+      id: `pl_height_${idSeq++}`,
+      type: 'placement_height_uniform',
+      category: 'feature_placement_height',
+      title: 'Uniform height placement',
+      values: [
+        {
+          name: 'min',
+          block: {
+            id: `v_min_${idSeq++}`,
+            type: 'vertical_anchor_absolute',
+            category: 'feature_placement_height',
+            title: 'Absolute height',
+            fields: { value: heightMatch[1] },
+          },
+        },
+        {
+          name: 'max',
+          block: {
+            id: `v_max_${idSeq++}`,
+            type: 'vertical_anchor_absolute',
+            category: 'feature_placement_height',
+            title: 'Absolute height',
+            fields: { value: heightMatch[2] },
+          },
+        },
+      ],
+    });
+  }
+
+  if (code.includes('BiomeFilter')) {
+    placements.push({
+      id: `pl_biome_${idSeq++}`,
+      type: 'placement_biome_filter',
+      category: 'feature_placement_conditional',
+      title: 'Biome filter placement',
+    });
+  }
+
+  if (placements.length > 0) {
+    for (let i = 0; i < placements.length - 1; i++) {
+      placements[i].next = placements[i + 1];
+    }
+    featureNode.next = placements[0];
+  }
+
+  return featureNode;
 }

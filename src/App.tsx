@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import * as pako from 'pako';
 import { Header } from './components/Header';
 import { JavaEditorPanel } from './components/JavaEditorPanel';
 import { VisualBlockCanvas } from './components/VisualBlockCanvas';
@@ -102,20 +103,38 @@ export default function App() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Export .ptpl, .aitpl, .cmdtpl, or .ftpl
+  // Export native MCreator .ptpl, .aitpl, .cmdtpl, or .ftpl template files (XML -> Base64 -> GZip)
   const handleExportFile = () => {
     if (!result?.blocklyXml) return;
     const ext = result.fileExtension || '.ptpl';
     const filename = `${result.procedureName || 'MCreatorElement'}${ext}`;
-    const blob = new Blob([result.blocklyXml], { type: 'text/xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    
+    try {
+      const xmlText = result.blocklyXml;
+      const b64Text = btoa(unescape(encodeURIComponent(xmlText)));
+      const compressedGzip = pako.gzip(b64Text);
+
+      const blob = new Blob([compressedGzip], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to export GZip template file:', err);
+      const blob = new Blob([result.blocklyXml], { type: 'text/xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
   };
 
 

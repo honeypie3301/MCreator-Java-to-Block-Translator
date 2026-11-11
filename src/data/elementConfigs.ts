@@ -19,7 +19,7 @@ export const ELEMENT_CONFIGS: Record<MCreatorElementType, MCreatorElementConfig>
     type: 'command',
     extension: '.cmdtpl',
     name: 'Command Execution',
-    rootTriggerBlock: 'command_trigger',
+    rootTriggerBlock: 'args_start',
     defaultXmlWrapper: 'xml',
   },
   feature: {
