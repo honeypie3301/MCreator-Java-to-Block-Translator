@@ -1088,6 +1088,240 @@ function isInventoryForeach(stmt: string): boolean {
   return (hasCapability && s.includes('for') && hasForeach) || (s.startsWith('for') && hasForeach);
 }
 
+function isEntityClearInventory(stmt: string): boolean {
+  const s = stmt.trim();
+  return (
+    s.includes('clearOrCountMatchingItems(p -> true') ||
+    s.includes('clearOrCountMatchingItems(p->true') ||
+    s.includes('getInventory().clearContent()') ||
+    s.includes('.clearInventory()')
+  );
+}
+
+function parseEntityClearInventoryStatement(
+  stmt: string,
+  idSeq: number,
+  breakdown: TranslationBreakdownItem[],
+  startLine?: number,
+  endLine?: number
+): BlockASTNode {
+  let entityNode: BlockASTNode = {
+    id: `ent_dep_${idSeq}`,
+    type: 'entity_from_deps',
+    category: 'entity',
+    title: 'Event/target entity',
+  };
+  const entMatch = stmt.match(/([_a-zA-Z0-9]+)\s+instanceof\s+Player/);
+  if (entMatch) {
+    const rawEnt = entMatch[1].trim();
+    if (rawEnt !== 'entity' && rawEnt !== '_player' && rawEnt !== '_ent' && rawEnt !== 'player') {
+      entityNode = parseExpressionToAST(rawEnt, idSeq * 10 + 1);
+    }
+  }
+
+  breakdown.push({
+    javaLine: stmt.length > 80 ? stmt.substring(0, 80) + '...' : stmt,
+    lineNumber: startLine,
+    blockId: `clear_inv_${idSeq}`,
+    mcreatorBlock: 'entity_clear_inventory',
+    explanation: 'Clear inventory of entity',
+  });
+
+  return {
+    id: `clear_inv_${idSeq}`,
+    type: 'entity_clear_inventory',
+    category: 'player',
+    title: 'Clear inventory of entity',
+    values: [{ name: 'entity', block: entityNode }],
+    sourceLine: startLine,
+    sourceEndLine: endLine,
+  };
+}
+
+function isEntityRemoveItem(stmt: string): boolean {
+  const s = stmt.trim();
+  return (
+    (s.includes('clearOrCountMatchingItems') && !s.includes('p -> true') && !s.includes('p->true')) ||
+    s.includes('removeItem(')
+  );
+}
+
+function parseEntityRemoveItemStatement(
+  stmt: string,
+  idSeq: number,
+  breakdown: TranslationBreakdownItem[],
+  startLine?: number,
+  endLine?: number
+): BlockASTNode {
+  let amountNode: BlockASTNode = {
+    id: `num_amt_${idSeq}`,
+    type: 'math_number',
+    category: 'math',
+    title: '1',
+    fields: { NUM: '1' },
+  };
+  const countMatch = stmt.match(/clearOrCountMatchingItems\s*\([^,]+,\s*(?:false\s*,\s*)?([^,]+),/);
+  if (countMatch) {
+    const rawCount = countMatch[1].trim();
+    amountNode = parseExpressionToAST(rawCount, idSeq * 10 + 1);
+  }
+
+  let itemNode: BlockASTNode = {
+    id: `item_rm_${idSeq}`,
+    type: 'mcitem_all',
+    category: 'item',
+    title: 'Item',
+    fields: { value: 'Items.AIR' },
+  };
+
+  const newStackMatch = stmt.match(/new\s+ItemStack\s*\(\s*([^)]+)\)/);
+  if (newStackMatch) {
+    const rawItemExpr = newStackMatch[1].trim();
+    const title = formatItemDisplayName(rawItemExpr);
+    const val = formatItemFieldValue(rawItemExpr);
+    itemNode = {
+      id: `item_rm_${idSeq}`,
+      type: 'mcitem_all',
+      category: 'item',
+      title: title || 'Item',
+      fields: { value: val },
+    };
+  }
+
+  let entityNode: BlockASTNode = {
+    id: `ent_dep_${idSeq}`,
+    type: 'entity_from_deps',
+    category: 'entity',
+    title: 'Event/target entity',
+  };
+  const entMatch = stmt.match(/([_a-zA-Z0-9]+)\s+instanceof\s+Player/);
+  if (entMatch) {
+    const rawEnt = entMatch[1].trim();
+    if (rawEnt !== 'entity' && rawEnt !== '_player' && rawEnt !== '_ent' && rawEnt !== 'player') {
+      entityNode = parseExpressionToAST(rawEnt, idSeq * 10 + 3);
+    }
+  }
+
+  breakdown.push({
+    javaLine: stmt.length > 80 ? stmt.substring(0, 80) + '...' : stmt,
+    lineNumber: startLine,
+    blockId: `rm_item_${idSeq}`,
+    mcreatorBlock: 'entity_remove_item',
+    explanation: 'Remove item from entity inventory',
+  });
+
+  return {
+    id: `rm_item_${idSeq}`,
+    type: 'entity_remove_item',
+    category: 'player',
+    title: 'Remove from inventory',
+    values: [
+      { name: 'amount', block: amountNode },
+      { name: 'item', block: itemNode },
+      { name: 'entity', block: entityNode },
+    ],
+    sourceLine: startLine,
+    sourceEndLine: endLine,
+  };
+}
+
+function isEntityAddItem(stmt: string): boolean {
+  const s = stmt.trim();
+  return (
+    s.includes('giveItemToPlayer(') ||
+    s.includes('placeItemBackInInventory(') ||
+    (s.includes('getInventory().add(') && !s.includes('getCooldowns')) ||
+    (s.includes('.addItem(') && !s.includes('getCooldowns'))
+  );
+}
+
+function parseEntityAddItemStatement(
+  stmt: string,
+  idSeq: number,
+  breakdown: TranslationBreakdownItem[],
+  startLine?: number,
+  endLine?: number
+): BlockASTNode {
+  let amountNode: BlockASTNode = {
+    id: `num_amt_${idSeq}`,
+    type: 'math_number',
+    category: 'math',
+    title: '1',
+    fields: { NUM: '1' },
+  };
+  const countMatch = stmt.match(/(?:_setstack|_stk|stack)\.setCount\s*\(([\s\S]+?)\);/);
+  if (countMatch) {
+    const rawCount = countMatch[1].trim();
+    amountNode = parseExpressionToAST(rawCount, idSeq * 10 + 1);
+  }
+
+  let itemNode: BlockASTNode = {
+    id: `item_add_${idSeq}`,
+    type: 'mcitem_all',
+    category: 'item',
+    title: 'Bowl',
+    fields: { value: 'Items.BOWL' },
+  };
+
+  const newStackMatch = stmt.match(/new\s+ItemStack\s*\(\s*([^)]+)\)/);
+  if (newStackMatch) {
+    const rawItemExpr = newStackMatch[1].trim();
+    const title = formatItemDisplayName(rawItemExpr);
+    const val = formatItemFieldValue(rawItemExpr);
+    itemNode = {
+      id: `item_add_${idSeq}`,
+      type: 'mcitem_all',
+      category: 'item',
+      title: title || 'Item',
+      fields: { value: val },
+    };
+  } else {
+    const giveMatch = stmt.match(/(?:giveItemToPlayer|placeItemBackInInventory|addItem)\s*\([^,]+,\s*([^)]+)\)/);
+    if (giveMatch) {
+      const rawItem = giveMatch[1].trim();
+      if (rawItem && rawItem !== '_setstack') {
+        itemNode = parseExpressionToAST(rawItem, idSeq * 10 + 2);
+      }
+    }
+  }
+
+  let entityNode: BlockASTNode = {
+    id: `ent_dep_${idSeq}`,
+    type: 'entity_from_deps',
+    category: 'entity',
+    title: 'Event/target entity',
+  };
+  const entMatch = stmt.match(/([_a-zA-Z0-9]+)\s+instanceof\s+Player/);
+  if (entMatch) {
+    const rawEnt = entMatch[1].trim();
+    if (rawEnt !== 'entity' && rawEnt !== '_player' && rawEnt !== '_ent' && rawEnt !== 'player') {
+      entityNode = parseExpressionToAST(rawEnt, idSeq * 10 + 3);
+    }
+  }
+
+  breakdown.push({
+    javaLine: stmt.length > 80 ? stmt.substring(0, 80) + '...' : stmt,
+    lineNumber: startLine,
+    blockId: `add_item_${idSeq}`,
+    mcreatorBlock: 'entity_add_item',
+    explanation: 'Add item to entity inventory',
+  });
+
+  return {
+    id: `add_item_${idSeq}`,
+    type: 'entity_add_item',
+    category: 'player',
+    title: 'Add to inventory',
+    values: [
+      { name: 'amount', block: amountNode },
+      { name: 'item', block: itemNode },
+      { name: 'entity', block: entityNode },
+    ],
+    sourceLine: startLine,
+    sourceEndLine: endLine,
+  };
+}
+
 function isInventorySetSlot(stmt: string): boolean {
   const s = stmt.trim();
   if (s.startsWith('if')) {
@@ -2146,6 +2380,18 @@ function parseJavaStatementInternal(
   // 0.2 INVENTORY SET SLOT: Set item in slot of inventory
   if (isInventorySetSlot(stmt)) {
     return parseInventorySetSlotStatement(stmt, idSeq, breakdown);
+  }
+  // 0.25 ENTITY ADD ITEM: Add item to entity inventory
+  if (isEntityAddItem(stmt)) {
+    return parseEntityAddItemStatement(stmt, idSeq, breakdown, startLine, endLine);
+  }
+  // 0.26 ENTITY CLEAR INVENTORY
+  if (isEntityClearInventory(stmt)) {
+    return parseEntityClearInventoryStatement(stmt, idSeq, breakdown, startLine, endLine);
+  }
+  // 0.27 ENTITY REMOVE ITEM
+  if (isEntityRemoveItem(stmt)) {
+    return parseEntityRemoveItemStatement(stmt, idSeq, breakdown, startLine, endLine);
   }
 
   // 0.3 ADVANCEMENTS: Award or revoke advancement
@@ -7524,6 +7770,18 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
       type: 'blockstate_from_deps',
       category: 'block',
       title: 'Blockstate at coords',
+    };
+  }
+
+  // STRING LITERALS (e.g. "backwoods_time" or 'backwoods_time')
+  if ((expr.startsWith('"') && expr.endsWith('"')) || (expr.startsWith("'") && expr.endsWith("'"))) {
+    const strVal = expr.slice(1, -1);
+    return {
+      id: `txt_${seq}`,
+      type: 'text',
+      category: 'text',
+      title: `"${strVal}"`,
+      fields: { TEXT: strVal },
     };
   }
 
