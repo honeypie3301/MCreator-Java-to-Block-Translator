@@ -1,13 +1,12 @@
 import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react';
-import { Play, Trash2, Code2, AlertCircle, Sparkles } from 'lucide-react';
+import { Play, Trash2, Code2, AlertCircle } from 'lucide-react';
 import { MCreatorElementType } from '../types';
-import { CustomDropdown } from './CustomDropdown';
 
 interface JavaEditorPanelProps {
   code: string;
   onChangeCode: (newCode: string) => void;
-  targetEvent: string;
-  onChangeTargetEvent: (event: string) => void;
+  targetEvent?: string;
+  onChangeTargetEvent?: (event: string) => void;
   onTranslate: () => void;
   isTranslating: boolean;
   elementType: MCreatorElementType;
@@ -17,25 +16,6 @@ interface JavaEditorPanelProps {
 }
 
 const LINE_HEIGHT = 20; // 20px per line (leading-5)
-
-const EVENT_TRIGGERS = [
-  { id: 'auto', label: 'Auto-Detect Event Trigger' },
-  { id: 'no_ext_trigger', label: 'No additional trigger (Static procedure)' },
-  { id: 'player_ticks', label: 'On player tick update (PlayerTickEvent)' },
-  { id: 'entity_ticks', label: 'On entity tick update (EntityTickEvent)' },
-  { id: 'world_ticks', label: 'On world tick update (LevelTickEvent)' },
-  { id: 'entity_attacked', label: 'When entity is attacked (LivingDamageEvent)' },
-  { id: 'block_break', label: 'When block is broken (BlockEvent.BreakEvent)' },
-  { id: 'right_clicked_item', label: 'When right clicked with item (PlayerInteractEvent)' },
-  { id: 'right_clicked_block', label: 'When right clicked on block' },
-  { id: 'entity_spawns', label: 'When entity spawns (EntityJoinLevelEvent)' },
-  { id: 'entity_dies', label: 'When entity dies (LivingDeathEvent)' },
-  { id: 'player_joins', label: 'When player logs in (PlayerLoggedInEvent)' },
-  { id: 'player_useitem_finish', label: 'When player finishes using item' },
-  { id: 'craft_item', label: 'When item is crafted (ItemCraftedEvent)' },
-  { id: 'explosion_occurs', label: 'When explosion occurs (ExplosionEvent)' },
-  { id: 'entity_dimension_changed', label: 'When entity changes dimension' },
-];
 
 export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
   code,
@@ -115,21 +95,6 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
             {totalLines.toLocaleString()} lines | {charCount.toLocaleString()} chars
           </span>
         </div>
-
-        {elementType === 'procedure' && (
-          <div className="flex items-center space-x-2">
-            <span className="text-[11px] text-[#A39B8E] font-medium">Event Listener:</span>
-            <CustomDropdown
-              value={targetEvent}
-              onChange={onChangeTargetEvent}
-              align="right"
-              options={EVENT_TRIGGERS.map((t) => ({
-                value: t.id,
-                label: t.label,
-              }))}
-            />
-          </div>
-        )}
       </div>
 
       {/* Editor Body with Synchronized Gutter */}

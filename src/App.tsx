@@ -34,7 +34,6 @@ public class ParanoiaAudioLogicProcedure {
 export default function App() {
   const [code, setCode] = useState<string>(DEFAULT_JAVA_INPUT);
   const [lastConvertedCode, setLastConvertedCode] = useState<string>('');
-  const [targetEvent, setTargetEvent] = useState<string>('auto');
   const [elementType, setElementType] = useState<MCreatorElementType>('procedure');
   const [neoForgeVersion, setNeoForgeVersion] = useState<NeoForgeVersion>('1.21.1');
 
@@ -73,7 +72,7 @@ export default function App() {
 
     try {
       // Deterministic AST & Blockly XML conversion based on MCreator GitHub database
-      const res = translateJavaToMCreator(code, elementType, neoForgeVersion, targetEvent, methodToUse);
+      const res = translateJavaToMCreator(code, elementType, neoForgeVersion, 'auto', methodToUse);
       setResult(res);
       setLastConvertedCode(code);
       if (res.activeMethodName) {
@@ -188,8 +187,6 @@ export default function App() {
               setCode(newCode);
               setSelectedMethod(undefined);
             }}
-            targetEvent={targetEvent}
-            onChangeTargetEvent={setTargetEvent}
             onTranslate={() => handleTranslate()}
             isTranslating={isTranslating}
             elementType={elementType}
@@ -284,7 +281,7 @@ export default function App() {
           </div>
 
           {/* Tab View Body */}
-          <div className="flex-1 p-3 bg-[#0F0E0D] overflow-auto">
+          <div className="flex-1 p-3 bg-[#0F0E0D] overflow-auto min-h-0 flex flex-col">
             {isTranslating ? (
               <div className="h-full flex flex-col items-center justify-center text-center space-y-3 py-12">
                 <div className="w-8 h-8 border-2 border-[#CEB098]/30 border-t-[#CEB098] rounded-full animate-spin" />

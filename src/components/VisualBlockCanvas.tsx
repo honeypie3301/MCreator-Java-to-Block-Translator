@@ -339,8 +339,7 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [viewMode, setViewMode] = useState<'blockly' | 'tree'>('blockly');
-  const [inputLayoutMode, setInputLayoutMode] = useState<'auto' | 'inline' | 'external'>('auto');
-  const [showSnippetGuide, setShowSnippetGuide] = useState<boolean>(false);
+  const inputLayoutMode = 'auto';
 
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
@@ -385,58 +384,10 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
               className="pl-8 pr-3 py-1 bg-[#14171d] border border-[#2e3440] rounded text-xs text-[#d8dee9] placeholder-[#5c6370] outline-none focus:border-[#434c5e] w-44"
             />
           </div>
-
-          {/* Snippets Info Toggle */}
-          <button
-            onClick={() => setShowSnippetGuide(true)}
-            className="flex items-center space-x-1 px-2 py-1 bg-[#28241e] hover:bg-[#342c22] border border-amber-600/40 text-amber-300 rounded transition text-[11px] cursor-pointer"
-            title="Clarification on MCreator Custom Code Snippet Blocks"
-          >
-            <Code2 className="w-3.5 h-3.5 text-amber-400" />
-            <span>Snippet Types</span>
-          </button>
         </div>
 
         {/* Right: View Toggles & Zoom Controls */}
         <div className="flex items-center space-x-2">
-          {/* Input Format Mode (Inline / External / Auto) */}
-          <div className="flex items-center bg-[#14171d] p-0.5 rounded border border-[#2e3440] text-[10.5px]">
-            <span className="text-[#6c768a] px-1.5 font-medium select-none hidden sm:inline">Inputs:</span>
-            <button
-              onClick={() => setInputLayoutMode('auto')}
-              className={`px-2 py-0.5 rounded font-medium transition cursor-pointer ${
-                inputLayoutMode === 'auto'
-                  ? 'bg-[#434c5e] text-[#eceff4] shadow-xs'
-                  : 'text-[#7e889b] hover:text-[#d8dee9]'
-              }`}
-              title="Automatically toggle inline or external inputs based on block complexity to prevent overlap"
-            >
-              Auto
-            </button>
-            <button
-              onClick={() => setInputLayoutMode('inline')}
-              className={`px-2 py-0.5 rounded font-medium transition cursor-pointer ${
-                inputLayoutMode === 'inline'
-                  ? 'bg-[#434c5e] text-[#eceff4] shadow-xs'
-                  : 'text-[#7e889b] hover:text-[#d8dee9]'
-              }`}
-              title="Force horizontal inline inputs"
-            >
-              Inline
-            </button>
-            <button
-              onClick={() => setInputLayoutMode('external')}
-              className={`px-2 py-0.5 rounded font-medium transition cursor-pointer ${
-                inputLayoutMode === 'external'
-                  ? 'bg-[#434c5e] text-[#eceff4] shadow-xs'
-                  : 'text-[#7e889b] hover:text-[#d8dee9]'
-              }`}
-              title="Force vertical stacked external input rows"
-            >
-              External
-            </button>
-          </div>
-
           {/* View Mode Switcher */}
           <div className="flex items-center bg-[#14171d] p-0.5 rounded border border-[#2e3440] text-[11px]">
             <button
@@ -497,47 +448,6 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Snippet Types Clarification Modal */}
-      {showSnippetGuide && (
-        <div className="bg-[#1f1a14] border-b border-amber-600/40 p-3 px-4 text-xs text-amber-100 flex items-start justify-between gap-4 animate-fadeIn">
-          <div className="space-y-1.5 flex-1">
-            <div className="flex items-center space-x-2 text-amber-300 font-bold text-xs">
-              <Code2 className="w-4 h-4" />
-              <span>MCreator Custom Code Snippet Blocks Architecture</span>
-            </div>
-            <p className="text-[11px] leading-relaxed text-amber-200/90">
-              In MCreator 2026.1, there are <strong>two distinct variants</strong> of the custom code snippet block:
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
-              <div className="bg-black/50 p-2.5 rounded border border-amber-500/30">
-                <div className="font-bold text-amber-300 text-[11px] flex items-center gap-1.5">
-                  <span className="px-1.5 py-0.2 rounded bg-amber-950 border border-amber-500/50 text-[10px]">Statement Snippet</span>
-                  <span>(custom_code_snippet)</span>
-                </div>
-                <p className="text-[10.5px] text-stone-300 mt-1">
-                  Features top puzzle notch & bottom tab. Inserts complete executable Java statements directly into the procedure flow.
-                </p>
-              </div>
-              <div className="bg-black/50 p-2.5 rounded border border-amber-500/30">
-                <div className="font-bold text-amber-300 text-[11px] flex items-center gap-1.5">
-                  <span className="px-1.5 py-0.2 rounded bg-amber-950 border border-amber-500/50 text-[10px]">Expression Snippet</span>
-                  <span>(custom_code_snippet_output)</span>
-                </div>
-                <p className="text-[10.5px] text-stone-300 mt-1">
-                  Features an output tab on the left. Evaluates Java expressions or returns fallback values like <code>(null)</code> into condition/value sockets.
-                </p>
-              </div>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowSnippetGuide(false)}
-            className="text-amber-400 hover:text-amber-200 p-1 rounded hover:bg-black/30 transition cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       {/* Canvas Workspace Area */}
       <div className="relative flex-1 bg-[#14171d] p-4 overflow-auto min-h-[420px] select-none">

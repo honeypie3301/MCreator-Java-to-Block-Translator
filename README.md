@@ -1,20 +1,23 @@
 # MCreator Java to Block Translator
 
-A high-performance AST compilation engine and visual procedure translator designed for Minecraft modders. It converts raw Minecraft Java source code (NeoForge 1.21.1+ / 26.3+) directly into authentic MCreator 2026.1+ Blockly visual blocks and exportable XML templates (`.ptpl`, `.aitpl`, `.cmdtpl`, `.ftpl`).
+A specialized AST compiler and visual procedure converter for Minecraft mod developers. It translates raw Minecraft Java source code (NeoForge 1.21.1+ / 26.3+) directly into authentic MCreator 2026.1+ Blockly visual blocks and exportable XML element templates (`.ptpl`, `.aitpl`, `.cmdtpl`, `.ftpl`).
 
 ---
 
-## Key Features
+## What Does This App Do?
 
-- **1:1 AST Mapping Engine**: Converts complex NeoForge Java constructs—including entity tag checks (`TagKey.create`), world difficulty comparisons, spatial cube iterations (`getEntitiesOfClass(...).inflate(...)`), persistent NBT tag modifications (`putDouble`, `putBoolean`, `putString`), and custom code snippets—into native MCreator 2026.1 procedure block structures.
-- **Authentic MCreator Blockly UI**: Features pixel-accurate visual block rendering with exact MCreator color themes, puzzle notches, C-block cavities, inline getter pills, and real-time procedure warning/error strips.
-- **Multi-Element Template Support**: Translates procedures (`.ptpl`), custom AI tasks (`.aitpl`), command templates (`.cmdtpl`), and feature placement templates (`.ftpl`).
-- **FreeMarker Pattern Synchronization**: Derived directly from the official MCreator repository FreeMarker templates (`neoforge-1.21.1` and `neoforge-26.3`), guaranteeing 100% compatibility when importing `.ptpl` XML files back into MCreator.
+Writing custom Minecraft procedures, commands, and AI tasks in Java often requires translating that logic back into MCreator for team workflows or visual maintenance. This application bridges that gap:
+
+1. **Automatic Java Code Parsing**: Paste any Minecraft NeoForge Java method, event listener (`@SubscribeEvent`), command handler, or helper procedure.
+2. **Auto-Detected Event Triggers**: Automatically identifies which event listener triggers the code (e.g., `PlayerTickEvent`, `LivingDamageEvent`, `BlockEvent.BreakEvent`, `EntityJoinLevelEvent`, and 100+ global MCreator triggers) without requiring manual configuration.
+3. **Interactive MCreator Blockly Canvas**: Renders the translated code as pixel-accurate MCreator 2026.1 visual Blockly blocks featuring authentic category colors, notches, C-block cavities, and inline arguments.
+4. **Exportable Templates**: Generates valid MCreator Blockly XML ready for direct export into `.ptpl` (Procedure Template), `.aitpl` (Entity AI Task), `.cmdtpl` (Command Template), or `.ftpl` (Feature Template) files for immediate import into MCreator workspaces.
+5. **AST Line Mapping**: Inspect an interactive line-by-line breakdown mapping each Java expression directly to its corresponding MCreator Blockly block ID and parameters.
 
 ---
 
-## Technical Architecture
+## What Is It For?
 
-1. **Parser & Lexer (`src/lib/mcreatorConverter.ts`)**: Fast token-based AST generator that identifies method entrypoints (`execute(...)` and `@SubscribeEvent` listeners), unifies variable scopes, extracts spatial bounding boxes (`new AABB(_center, _center).inflate(r / 2d)`), and constructs structured `BlockASTNode` graphs.
-2. **Blockly XML Generator**: Converts `BlockASTNode` graphs into standardized MCreator Blockly XML specifications, adhering to `xml.xml` element hierarchies and variable declarations (`local:var_name`).
-3. **Canvas Renderer (`src/components/VisualBlockCanvas.tsx`)**: Virtualized React canvas rendering Blockly blocks, puzzle connections, nested DO/ELSE cavities, dropdown fields, and custom code snippet sockets (`#7b5ba5`).
+- **Minecraft Modders & MCreator Users**: Quickly convert custom written Java algorithms into visual Blockly procedures that can be shared, edited, and imported directly into MCreator.
+- **Porting & Reverse Engineering**: Analyze existing mod source code and convert its event triggers, conditionals, math routines, inventory manipulations, and entity logic into clean MCreator procedure blocks.
+- **Learning & Compatibility**: Understand how modern NeoForge 1.21.1+ constructs (such as `DataComponents`, `ResourceKey`, `LevelAccessor`, item capabilities, and modern damage sources) map to MCreator 2026.1 blockly abstractions.

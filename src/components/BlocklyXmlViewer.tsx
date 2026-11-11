@@ -54,20 +54,30 @@ export const BlocklyXmlViewer: React.FC<BlocklyXmlViewerProps> = ({
       </div>
 
       {/* Code Container */}
-      <div className="flex-1 bg-[#0F0E0D] p-3 overflow-auto flex">
-        <div className="select-none pr-3 text-[#5C554D] border-r border-[#24201D] text-right min-w-[2.5rem] font-mono text-[11px] leading-5">
-          {lines.map((_, i) => (
-            <div key={i}>{i + 1}</div>
-          ))}
-        </div>
+      <div className="flex-1 min-h-0 bg-[#0F0E0D] overflow-hidden flex flex-col relative">
+        <div className="flex-1 overflow-auto flex select-text font-mono text-xs leading-5">
+          {/* Synchronized Line Numbers Gutter */}
+          <div className="select-none py-3 px-3 text-[#5C554D] bg-[#141210] border-r border-[#24201D] text-right min-w-[3.2rem] font-mono text-[11px] leading-5 shrink-0 sticky left-0 z-10">
+            {lines.map((_, i) => (
+              <div key={i}>{i + 1}</div>
+            ))}
+          </div>
 
-        <pre className="pl-3 text-[#E8D8C8] font-mono text-xs leading-5 whitespace-pre selection:bg-[#CEB098]/30 overflow-x-auto">
-          {xml}
-        </pre>
+          {/* XML Code Body with Syntax Coloring */}
+          <pre className="py-3 px-4 text-[#E8D8C8] font-mono text-xs leading-5 whitespace-pre selection:bg-[#CEB098]/30 overflow-visible flex-1">
+            <code>
+              {lines.map((line, i) => (
+                <div key={i} className="hover:bg-[#1A1816]/70 px-1 rounded-sm">
+                  {highlightXmlLine(line)}
+                </div>
+              ))}
+            </code>
+          </pre>
+        </div>
       </div>
 
       {/* Footer Info */}
-      <div className="bg-[#121110] px-3 py-1.5 border-t border-[#2E2925] text-[11px] text-[#A39B8E] flex items-center justify-between">
+      <div className="bg-[#121110] px-3 py-1.5 border-t border-[#2E2925] text-[11px] text-[#A39B8E] flex items-center justify-between shrink-0">
         <span className="flex items-center space-x-1">
           <CheckCircle2 className="w-3.5 h-3.5 text-[#CEB098]" />
           <span>Valid MCreator 2026.1 Blockly XML Structure</span>
@@ -77,3 +87,45 @@ export const BlocklyXmlViewer: React.FC<BlocklyXmlViewerProps> = ({
     </div>
   );
 };
+
+function highlightXmlLine(line: string): React.ReactNode {
+  // Simple, safe XML token highlighting for tags, attributes, and text
+  const parts: React.ReactNode[] = [];
+  const regex = /(<\/?[a-zA-Z0-9_:-]+)|(\s+[a-zA-Z0-9_:-]+=)|("[^"]*")|(\/?>)|([^<]+)/g;
+  let match;
+  let lastIndex = 0;
+
+  while ((match = regex.exec(line)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(line.substring(lastIndex, match.index));
+    }
+    const [full, tag, attr, str, closing, text] = match;
+
+    if (tag) {
+      parts.push(<span key={match.index} className="text-[#E06C75] font-semibold">{tag}</span>);
+    } else if (attr) {
+      const eqIdx = attr.indexOf('=');
+      const attrName = attr.substring(0, eqIdx);
+      parts.push(
+        <span key={match.index}>
+          <span className="text-[#D19A66]">{attrName}</span>=
+        </span>
+      );
+    } else if (str) {
+      parts.push(<span key={match.index} className="text-[#98C379]">{str}</span>);
+    } else if (closing) {
+      parts.push(<span key={match.index} className="text-[#E06C75] font-semibold">{closing}</span>);
+    } else if (text) {
+      parts.push(<span key={match.index} className="text-[#E5C07B]">{text}</span>);
+    } else {
+      parts.push(full);
+    }
+    lastIndex = regex.lastIndex;
+  }
+
+  if (lastIndex < line.length) {
+    parts.push(line.substring(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : ' ';
+}

@@ -16,16 +16,105 @@ export const GLOBAL_TRIGGERS: Record<string, string> = {
   entity_ticks: 'On entity tick update',
   world_ticks: 'On world tick update',
   entity_attacked: 'When entity is attacked',
-  block_break: 'When block is broken',
+  block_break: 'A block is broken',
+  block_multiplace: 'A block is multiplaced',
+  block_place: 'A block is placed',
+  bonemeal_used: 'Bonemeal is used',
+  bucket_filled: 'Bucket is filled',
+  chat_sent: 'Player sent chat',
+  command_executed: 'Command executed',
+  crop_attempts_growth: 'Crop attempts to grow',
+  entity_blocks: 'Entity blocks with shield',
+  entity_change_equipment: 'Entity changes equipment',
+  entity_dies: 'Entity dies',
+  entity_dropxp: 'Entity drops experience',
+  entity_falls: 'Entity falls',
+  entity_grief: 'Entity about to grief the world',
+  entity_healed: 'Entity is healed',
+  entity_item_pickup: 'Entity attempts to pick up item',
+  entity_joins_world: 'Entity joins the world',
+  entity_jumps: 'Entity jumps',
+  entity_pickupxp: 'Entity picks up experience',
+  entity_pre_hurt: 'Entity is hurt',
+  entity_sets_attack_target: 'Entity sets its attack target',
+  entity_spawns: 'Entity spawns',
+  entity_struck_by_lightning: 'Entity struck by lightning',
+  entity_switch_hand: 'Entity switches hand',
+  entity_tamed: 'Entity is tamed',
+  entity_travels_to_dimension: 'Entity travels to a dimension',
+  entity_uses_totem: 'Entity uses a totem',
+  explosion_occurs: 'An explosion occurs',
+  farmland_trampled: 'Farmland is trampled',
+  gem_dropped: 'Item is dropped',
+  gem_expired: 'Dropped item expires',
+  item_crafted: 'Item is crafted',
+  item_destroyed: 'Item is destroyed',
+  item_smelted: 'Item is smelted',
+  minecraft_world_loaded: 'Minecraft loads a world',
+  minecraft_world_unloaded: 'Minecraft unloads a world',
+  mod_clientload: 'Mod client-side loaded',
+  mod_load: 'Mod loaded in the game',
+  mod_serverload: 'Mod server-side loaded',
+  player_completes_advancement: 'Player completes advancement',
+  player_critical_hit: 'Player deals critical hit',
+  player_fishes_item: 'Player fishes item',
+  player_in_bed: 'Player goes to bed',
+  player_left_click_air: 'Player left clicks in air',
+  player_left_click_block: 'Player left clicks block',
+  player_log_in: 'Player joins the world',
+  player_log_out: 'Player leaves the world',
+  player_respawn: 'Player respawns',
+  player_right_click_block: 'Player right clicks block',
+  player_right_click_entity: 'Player right clicks on entity',
+  player_right_click_item: 'Player right clicks with item',
+  player_right_click_empty_hand: 'Player right clicks with empty hand',
+  player_use_hoe: 'Player tills with hoe',
+  player_useitem_finish: 'Player finishes using item',
+  player_useitem_start: 'Player uses item',
+  player_useitem_stop: 'Player stops using item',
+  player_wakes_up: 'Player wakes up',
+  player_xp_change: 'Player XP amount changes',
+  player_xp_level_change: 'Player XP level changes',
+  sapling_glow: 'Block grows into feature',
+  village_siege: 'Zombies siege a village',
+  world_loaded: 'On world loaded',
+  mcreator_link_device_connected: 'MCreator Link: New device connected',
+  mcreator_link_message_received: 'MCreator Link: Custom message received',
+  mcreator_link_pin_changed: 'MCreator Link: Digital pin changed',
   right_clicked_item: 'When right clicked with item',
   right_clicked_block: 'When right clicked on block',
-  entity_spawns: 'When entity spawns',
-  entity_dies: 'When entity dies',
-  player_joins: 'When player logs in',
-  player_useitem_finish: 'When player finishes using item',
-  craft_item: 'When item is crafted',
-  explosion_occurs: 'When explosion occurs',
   entity_dimension_changed: 'When entity changes dimension',
+  craft_item: 'When item is crafted',
+  player_joins: 'When player logs in',
+  be_global_player_ticks: '[Global] On player tick update',
+  be_global_world_ticks: '[Global] On world tick update',
+  be_global_block_place: '[Global] A block is placed',
+  be_global_entity_dies: '[Global] Entity dies',
+  be_global_world_loaded: '[Global] On world loaded',
+  be_global_weather_change: '[Global] Weather changes',
+  be_global_player_interact_block: '[Global] Player interacts with block',
+  be_global_player_interact_entity: '[Global] Player interacts with entity',
+  be_global_entity_hits_entity: '[Global] Entity hits another entity (melee attack)',
+  be_global_entity_is_hurt: '[Global] Entity is hurt',
+  be_global_entity_spawned: '[Global] Entity is spawned',
+  be_global_block_explode: '[Global] Block exploded',
+  be_global_entity_healed: '[Global] Entity is healed',
+  be_global_entity_hits_block: '[Global] Entity hits a block',
+  be_global_item_charged: '[Global] Item finished charging',
+  be_global_item_released: '[Global] Chargeable item is released',
+  be_global_item_starts_charging: '[Global] Chargeable item starts charging',
+  be_global_item_stops_charging: '[Global] Chargeable item stops charging or released',
+  be_local_block_break: '[Local, Block] Block broken',
+  be_local_block_place: '[Local, Block] Block placed',
+  be_local_block_player_break: '[Local, Block] Player breaks block',
+  be_local_block_player_interact: '[Local, Block] Player interacts with block',
+  be_local_block_random_tick: '[Local, Block] Block random tick',
+  be_local_item_use: '[Local, Item] Item used',
+  be_local_item_consume: '[Local, Item] Item consumed',
+  be_local_item_entity_hit: '[Local, Item] Item hits entity',
+  be_local_item_mine_block: '[Local, Item] Block mined with item',
+  be_local_item_use_completed: '[Local, Item] Item use finished',
+  be_local_item_use_on_block: '[Local, Item] Item used on block',
 };
 
 export function translateJavaToMCreator(
@@ -68,11 +157,15 @@ export function translateJavaToMCreator(
     );
 
     if (isDelegator && realExecuteMethod && activeMethod && realExecuteMethod.body.length > activeMethod.body.length) {
-      // Inherit the event trigger from the subscriber method if it had one
       if (activeMethod.eventTrigger) {
         bridgeTrigger = activeMethod.eventTrigger;
       }
       activeMethod = realExecuteMethod;
+    }
+    // Always scan detected subscriber methods for global event trigger
+    const subMethod = detectedMethods.find(m => m.eventTrigger || (m.signature && m.signature.includes("@SubscribeEvent")));
+    if (subMethod && subMethod.eventTrigger && !bridgeTrigger) {
+      bridgeTrigger = subMethod.eventTrigger;
     }
 
     if (!activeMethod) {
@@ -431,6 +524,12 @@ function unwrapMCreatorBoilerplate(text: string): string {
     (_, _lvl, serverSideBody) => serverSideBody.trim()
   );
 
+  // -0.1. Unwrap ICancellableEvent boilerplate:
+  s = s.replace(
+    /if\s*\(\s*event\s+instanceof\s+ICancellableEvent\s+([_a-zA-Z0-9]+)\s*\)\s*\{\s*\1\.setCanceled\(true\);\s*\}/g,
+    "event.setCanceled(true);"
+  );
+
   // 0. Unwrap statement-level instanceof defensive type guard wrappers:
   // if (entity instanceof Player _player) _player.causeFoodExhaustion(-1); -> entity.causeFoodExhaustion(-1);
   // if (entity instanceof Player _player) _player.giveExperiencePoints(10); -> entity.giveExperiencePoints(10);
@@ -452,9 +551,10 @@ function unwrapMCreatorBoilerplate(text: string): string {
   // 1. Unwrap inline instanceof casts inside ternaries:
   // (entity instanceof LivingEntity _livEnt ? _livEnt.getHealth() : -1) -> entity.getHealth()
   // (entity instanceof Player _plr ? _plr.getFoodData().getFoodLevel() : 0) -> entity.getFoodData().getFoodLevel()
+  // (entity instanceof LivingEntity _livEnt ? _livEnt.getMainHandItem() : ItemStack.EMPTY) -> entity.getMainHandItem()
   s = s.replace(
-    /\(?\s*([a-zA-Z0-9_.]+)\s+instanceof\s+(?:LivingEntity|Player|Entity|ServerPlayer)\s+([a-zA-Z0-9_]+)\s*\?\s*\2\.([^:]+?)\s*:\s*[-0-9a-zA-Z_."'()]+\s*\)?/g,
-    (_, ent, alias, call) => `${ent}.${call.trim()}`
+    /\(\s*([a-zA-Z0-9_.]+)\s+instanceof\s+[a-zA-Z0-9_.]+\s+([a-zA-Z0-9_]+)\s*\?\s*\2\.((?:[a-zA-Z0-9_.]+(?:\([^()]*\))*)+)\s*:\s*(?:ItemStack\.EMPTY|false|true|-?\d+(?:\.\d+)?f?|null|"[^"]*"|'[^']*')\s*\)/g,
+    (_, ent, _alias, call) => `${ent}.${call.trim()}`
   );
 
   // 2. Unwrap ResourceKey / ResourceLocation dimension lookups:
@@ -635,16 +735,120 @@ export function extractClassMethods(code: string): DetectedMethod[] {
             const mName = methodMatch[1];
             const mParams = methodMatch[2].trim();
             let eventTrigger: string | undefined;
-            if (header.includes('LivingIncomingDamageEvent') || header.includes('LivingDamageEvent')) {
-              eventTrigger = 'entity_attacked';
-            } else if (header.includes('EntityTickEvent')) {
-              eventTrigger = 'entity_ticks';
-            } else if (header.includes('PlayerTickEvent')) {
-              eventTrigger = 'player_ticks';
-            } else if (header.includes('LivingDeathEvent')) {
-              eventTrigger = 'entity_dies';
-            } else if (header.includes('BlockEvent.BreakEvent')) {
-              eventTrigger = 'block_break';
+            if (header.includes("RightClickBlock") || mName === "onRightClickBlock") {
+              eventTrigger = "player_right_click_block";
+            } else if (header.includes("RightClickItem") || mName === "onRightClickItem") {
+              eventTrigger = "player_right_click_item";
+            } else if (header.includes("EntityInteract") || mName === "onRightClickEntity") {
+              eventTrigger = "player_right_click_entity";
+            } else if (header.includes("LeftClickBlock") || mName === "onLeftClickBlock") {
+              eventTrigger = "player_left_click_block";
+            } else if (header.includes("LeftClickEmpty") || mName === "onLeftClick") {
+              eventTrigger = "player_left_click_air";
+            } else if (header.includes("RightClickEmpty") || mName === "onRightClick") {
+              eventTrigger = "player_right_click_empty_hand";
+            } else if (header.includes("LivingIncomingDamageEvent") || header.includes("LivingDamageEvent") || mName === "onEntityAttacked") {
+              eventTrigger = "entity_attacked";
+            } else if (header.includes("LivingDeathEvent") || mName === "onEntityDeath") {
+              eventTrigger = "entity_dies";
+            } else if (header.includes("EntityTickEvent") || mName === "onEntityTick") {
+              eventTrigger = "entity_ticks";
+            } else if (header.includes("PlayerTickEvent") || mName === "onPlayerTick") {
+              eventTrigger = "player_ticks";
+            } else if (header.includes("LevelTickEvent") || mName === "onWorldTick") {
+              eventTrigger = "world_ticks";
+            } else if (header.includes("BreakEvent") || mName === "onBlockBreak") {
+              eventTrigger = "block_break";
+            } else if (header.includes("EntityPlaceEvent") || mName === "onBlockPlace") {
+              eventTrigger = "block_place";
+            } else if (header.includes("EntityMultiPlaceEvent") || mName === "onBlockMultiPlace") {
+              eventTrigger = "block_multiplace";
+            } else if (header.includes("FarmlandTrampleEvent") || mName === "onFarmlandTrampled") {
+              eventTrigger = "farmland_trampled";
+            } else if (header.includes("BonemealEvent") || mName === "onBonemeal") {
+              eventTrigger = "bonemeal_used";
+            } else if (header.includes("ServerChatEvent") || mName === "onChat") {
+              eventTrigger = "chat_sent";
+            } else if (header.includes("CommandEvent") || mName === "onCommand") {
+              eventTrigger = "command_executed";
+            } else if (header.includes("CropGrowEvent") || mName === "onCropGrowPre") {
+              eventTrigger = "crop_attempts_growth";
+            } else if (header.includes("LivingShieldBlockEvent")) {
+              eventTrigger = "entity_blocks";
+            } else if (header.includes("LivingEquipmentChangeEvent")) {
+              eventTrigger = "entity_change_equipment";
+            } else if (header.includes("LivingExperienceDropEvent")) {
+              eventTrigger = "entity_dropxp";
+            } else if (header.includes("LivingFallEvent")) {
+              eventTrigger = "entity_falls";
+            } else if (header.includes("EntityMobGriefingEvent")) {
+              eventTrigger = "entity_grief";
+            } else if (header.includes("LivingHealEvent")) {
+              eventTrigger = "entity_healed";
+            } else if (header.includes("ItemEntityPickupEvent")) {
+              eventTrigger = "entity_item_pickup";
+            } else if (header.includes("EntityJoinLevelEvent")) {
+              eventTrigger = "entity_spawns";
+            } else if (header.includes("LivingJumpEvent")) {
+              eventTrigger = "entity_jumps";
+            } else if (header.includes("PickupXp")) {
+              eventTrigger = "entity_pickupxp";
+            } else if (header.includes("LivingChangeTargetEvent")) {
+              eventTrigger = "entity_sets_attack_target";
+            } else if (header.includes("EntityStruckByLightningEvent")) {
+              eventTrigger = "entity_struck_by_lightning";
+            } else if (header.includes("LivingSwapItemsEvent")) {
+              eventTrigger = "entity_switch_hand";
+            } else if (header.includes("AnimalTameEvent")) {
+              eventTrigger = "entity_tamed";
+            } else if (header.includes("EntityTravelToDimensionEvent")) {
+              eventTrigger = "entity_travels_to_dimension";
+            } else if (header.includes("LivingUseTotemEvent")) {
+              eventTrigger = "entity_uses_totem";
+            } else if (header.includes("ExplosionEvent")) {
+              eventTrigger = "explosion_occurs";
+            } else if (header.includes("ItemTossEvent")) {
+              eventTrigger = "gem_dropped";
+            } else if (header.includes("ItemExpireEvent")) {
+              eventTrigger = "gem_expired";
+            } else if (header.includes("ItemCraftedEvent")) {
+              eventTrigger = "item_crafted";
+            } else if (header.includes("PlayerDestroyItemEvent")) {
+              eventTrigger = "item_destroyed";
+            } else if (header.includes("ItemSmeltedEvent")) {
+              eventTrigger = "item_smelted";
+            } else if (header.includes("LevelEvent.Load")) {
+              eventTrigger = "minecraft_world_loaded";
+            } else if (header.includes("LevelEvent.Unload")) {
+              eventTrigger = "minecraft_world_unloaded";
+            } else if (header.includes("AdvancementEarnEvent")) {
+              eventTrigger = "player_completes_advancement";
+            } else if (header.includes("CriticalHitEvent")) {
+              eventTrigger = "player_critical_hit";
+            } else if (header.includes("ItemFishedEvent")) {
+              eventTrigger = "player_fishes_item";
+            } else if (header.includes("CanPlayerSleepEvent")) {
+              eventTrigger = "player_in_bed";
+            } else if (header.includes("PlayerLoggedInEvent")) {
+              eventTrigger = "player_log_in";
+            } else if (header.includes("PlayerLoggedOutEvent")) {
+              eventTrigger = "player_log_out";
+            } else if (header.includes("PlayerRespawnEvent")) {
+              eventTrigger = "player_respawn";
+            } else if (header.includes("LivingEntityUseItemEvent.Finish")) {
+              eventTrigger = "player_useitem_finish";
+            } else if (header.includes("LivingEntityUseItemEvent.Start")) {
+              eventTrigger = "player_useitem_start";
+            } else if (header.includes("LivingEntityUseItemEvent.Stop")) {
+              eventTrigger = "player_useitem_stop";
+            } else if (header.includes("BlockToolModificationEvent")) {
+              eventTrigger = "player_use_hoe";
+            } else if (header.includes("PlayerWakeUpEvent")) {
+              eventTrigger = "player_wakes_up";
+            } else if (header.includes("PlayerXpEvent.XpChange")) {
+              eventTrigger = "player_xp_change";
+            } else if (header.includes("PlayerXpEvent.LevelChange")) {
+              eventTrigger = "player_xp_level_change";
             }
 
             const startLine = code.substring(0, headerStartChar).split('\n').length;
@@ -2462,7 +2666,51 @@ function parseJavaStatementInternal(
     };
   }
 
+  // 12.5 BLOCK REPLACE: world.setBlock(pos, state, 3) where state is defaultBlockState
+  if (stmt.includes(".defaultBlockState()") && (stmt.includes("world.setBlock(") || stmt.includes(".setBlock("))) {
+    const blockMatch = stmt.match(/([A-Za-z0-9_]+ModBlocks|[A-Za-z0-9_]+Blocks|Blocks)\.([A-Za-z0-9_]+)/);
+    const rawBlock = blockMatch ? blockMatch[2] : "DIRT";
+    const cleanName = "CUSTOM:" + rawBlock.toLowerCase().split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join("");
+
+    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `blk_rep_${idSeq}`, mcreatorBlock: "block_replace", explanation: `Replace block at position with ${cleanName}` });
+    return {
+      id: `blk_rep_${idSeq}`,
+      type: "block_replace",
+      category: "block",
+      title: "Replace block at",
+      fields: { state: "FALSE", nbt: "FALSE" },
+      values: [
+        { name: "x", block: { id: `x_${idSeq}`, type: "coord_x", category: "world", title: "x" } },
+        { name: "y", block: { id: `y_${idSeq}`, type: "coord_y", category: "world", title: "y" } },
+        { name: "z", block: { id: `z_${idSeq}`, type: "coord_z", category: "world", title: "z" } },
+        { name: "block", block: { id: `mcitem_${idSeq}`, type: "mcitem_all", category: "item", title: cleanName.replace("CUSTOM:", ""), fields: { value: cleanName } } },
+      ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
+
   // 13. WORLD DESTROY BLOCK: world.destroyBlock(...) / world.removeBlock(...)
+  if (stmt.includes(".destroyBlock(")) {
+    const hasParticles = !stmt.includes("false)");
+    const blockType = hasParticles ? "block_remove_drop" : "block_remove";
+    const title = hasParticles ? "Remove block at and spawn break particles" : "Remove block at";
+
+    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `block_rem_${idSeq}`, mcreatorBlock: blockType, explanation: title });
+    return {
+      id: `block_rem_${idSeq}`,
+      type: blockType,
+      category: "block",
+      title,
+      values: [
+        { name: "x", block: { id: `x_${idSeq}`, type: "coord_x", category: "world", title: "x" } },
+        { name: "y", block: { id: `y_${idSeq}`, type: "coord_y", category: "world", title: "y" } },
+        { name: "z", block: { id: `z_${idSeq}`, type: "coord_z", category: "world", title: "z" } },
+      ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
   if (stmt.includes('.destroyBlock(') || stmt.includes('.removeBlock(')) {
     breakdown.push({ javaLine: stmt, mcreatorBlock: 'block_remove', explanation: 'Destroy block at position' });
     return {
@@ -2727,6 +2975,265 @@ function parseJavaStatementInternal(
         { name: 'entity', block: { id: `ent_${idSeq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' } },
         { name: 'vx', block: parseExpressionToAST(vecExpr, idSeq * 10 + 1) },
       ],
+    };
+  }
+
+  // 17.1 ENTITY COBWEB (entity.makeStuckInBlock)
+  if (stmt.includes('makeStuckInBlock(')) {
+    const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)\./);
+    const target = targetMatch ? targetMatch[1] : 'entity';
+    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `cobweb_${idSeq}`, mcreatorBlock: 'entity_setinweb', explanation: 'Set entity in cobweb for one tick' });
+    return {
+      id: `cobweb_${idSeq}`,
+      type: 'entity_setinweb',
+      category: 'entity',
+      title: 'Set [Entity] in cobweb for one tick',
+      values: [
+        { name: 'entity', block: parseExpressionToAST(target, idSeq * 10 + 1) },
+      ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
+
+  // 17.2 ENTITY CLEAR ALL POTIONS (entity.removeAllEffects)
+  if (stmt.includes('removeAllEffects(')) {
+    const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)\./);
+    const target = targetMatch ? targetMatch[1] : 'entity';
+    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `clrpots_${idSeq}`, mcreatorBlock: 'entity_clearpotions', explanation: 'Clear all potion effects of entity' });
+    return {
+      id: `clrpots_${idSeq}`,
+      type: 'entity_clearpotions',
+      category: 'action',
+      title: 'Clear all potion effects of entity',
+      values: [
+        { name: 'entity', block: parseExpressionToAST(target, idSeq * 10 + 1) },
+      ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
+
+  // 17.3 ENTITY REMOVE SPECIFIC POTION EFFECT (entity.removeEffect)
+  if (stmt.includes('.removeEffect(')) {
+    const potMatch = stmt.match(/removeEffect\s*\(([^)]+)\)/);
+    const potType = potMatch ? potMatch[1].trim() : 'MobEffects.REGENERATION';
+    const cleanPot = potType.replace(/MobEffects\./, '').toLowerCase();
+    const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)\./);
+    const target = targetMatch ? targetMatch[1] : 'entity';
+
+    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `rm_pot_${idSeq}`, mcreatorBlock: 'entity_remove_specific_potion_effect', explanation: `Remove potion effect ${cleanPot}` });
+    return {
+      id: `rm_pot_${idSeq}`,
+      type: 'entity_remove_specific_potion_effect',
+      category: 'action',
+      title: `Remove specific potion effect`,
+      fields: { potion: cleanPot },
+      values: [
+        { name: 'entity', block: parseExpressionToAST(target, idSeq * 10 + 1) },
+      ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
+
+  // 17.4 ENTITY RIDING: startRiding & stopRiding
+  if (stmt.includes('.startRiding(')) {
+    const rideMatch = stmt.match(/^([a-zA-Z0-9_]+)\.startRiding\s*\(([^,)]+)/);
+    const passenger = rideMatch ? rideMatch[1].trim() : 'sourceentity';
+    const vehicle = rideMatch ? rideMatch[2].trim() : 'entity';
+
+    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `ride_${idSeq}`, mcreatorBlock: 'entity_makeride', explanation: 'Make entity ride entity' });
+    return {
+      id: `ride_${idSeq}`,
+      type: 'entity_makeride',
+      category: 'action',
+      title: 'Make entity ride entity',
+      values: [
+        { name: 'sourceentity', block: parseExpressionToAST(passenger, idSeq * 10 + 1) },
+        { name: 'entity', block: parseExpressionToAST(vehicle, idSeq * 10 + 2) },
+      ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
+
+  if (stmt.includes('.stopRiding()')) {
+    const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)\./);
+    const target = targetMatch ? targetMatch[1] : 'entity';
+
+    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `stopride_${idSeq}`, mcreatorBlock: 'entity_makestopriding', explanation: 'Make entity stop riding' });
+    return {
+      id: `stopride_${idSeq}`,
+      type: 'entity_makestopriding',
+      category: 'action',
+      title: 'Make entity stop riding entity',
+      values: [
+        { name: 'entity', block: parseExpressionToAST(target, idSeq * 10 + 1) },
+      ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
+
+  // 17.5 ENTITY PUSH (entity.push(dx, dy, dz))
+  if (stmt.includes('.push(') && !stmt.includes('.pushPath(')) {
+    const pushMatch = stmt.match(/^([a-zA-Z0-9_]+)\.push\s*\(([^,]+),([^,]+),([^)]+)\)/);
+    const target = pushMatch ? pushMatch[1].trim() : 'entity';
+    const dx = pushMatch ? pushMatch[2].trim() : '1';
+    const dy = pushMatch ? pushMatch[3].trim() : '1';
+    const dz = pushMatch ? pushMatch[4].trim() : '1';
+
+    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `push_${idSeq}`, mcreatorBlock: 'entity_push', explanation: 'Push entity with delta' });
+    return {
+      id: `push_${idSeq}`,
+      type: 'entity_push',
+      category: 'action',
+      title: 'Push entity with dx dy dz',
+      values: [
+        { name: 'entity', block: parseExpressionToAST(target, idSeq * 10 + 1) },
+        { name: 'x', block: parseExpressionToAST(dx, idSeq * 10 + 2) },
+        { name: 'y', block: parseExpressionToAST(dy, idSeq * 10 + 3) },
+        { name: 'z', block: parseExpressionToAST(dz, idSeq * 10 + 4) },
+      ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
+
+  // 17.6 ENTITY TAME (entity.tame(player))
+  if (stmt.includes('.tame(')) {
+    const tameMatch = stmt.match(/^([a-zA-Z0-9_]+)\.tame\s*\(([^)]+)\)/);
+    const target = tameMatch ? tameMatch[1].trim() : 'entity';
+    const tamer = tameMatch ? tameMatch[2].trim() : 'sourceentity';
+
+    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `tame_${idSeq}`, mcreatorBlock: 'entity_maketamed', explanation: 'Tame entity' });
+    return {
+      id: `tame_${idSeq}`,
+      type: 'entity_maketamed',
+      category: 'action',
+      title: 'Tame entity by sourceentity',
+      values: [
+        { name: 'entity', block: parseExpressionToAST(target, idSeq * 10 + 1) },
+        { name: 'sourceentity', block: parseExpressionToAST(tamer, idSeq * 10 + 2) },
+      ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
+
+  // 17.7 OVERRIDE FALL DISTANCE
+  if (stmt.includes('fallDistance =') || stmt.includes('.setFallDistance(') || stmt.includes('resetFallDistance(')) {
+    const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)\./);
+    const target = targetMatch ? targetMatch[1] : 'entity';
+    const distMatch = stmt.match(/=\s*([^;]+);/) || stmt.match(/setFallDistance\s*\(([^)]+)\)/);
+    const dist = distMatch ? distMatch[1].trim() : '0';
+
+    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `fall_${idSeq}`, mcreatorBlock: 'entity_override_fall', explanation: 'Override fall distance of entity' });
+    return {
+      id: `fall_${idSeq}`,
+      type: 'entity_override_fall',
+      category: 'entity',
+      title: 'Override fall distance of entity',
+      values: [
+        { name: 'height', block: parseExpressionToAST(dist, idSeq * 10 + 1) },
+        { name: 'entity', block: parseExpressionToAST(target, idSeq * 10 + 2) },
+      ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
+
+  // 17.8 PATHFINDING & NAVIGATION (moveTo, stop navigation, rotate to face)
+  if (stmt.includes('.moveTo(') && (stmt.includes('getNavigation()') || stmt.includes('navigation'))) {
+    const navMatch = stmt.match(/moveTo\s*\(([^,]+),([^,]+),([^,]+),([^)]+)\)/);
+    const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)\./);
+    const target = targetMatch ? targetMatch[1] : 'entity';
+    const x = navMatch ? navMatch[1].trim() : 'x';
+    const y = navMatch ? navMatch[2].trim() : 'y';
+    const z = navMatch ? navMatch[3].trim() : 'z';
+    const spd = navMatch ? navMatch[4].trim() : '1';
+
+    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `path_${idSeq}`, mcreatorBlock: 'entity_pathfind_to', explanation: 'Pathfind entity to position' });
+    return {
+      id: `path_${idSeq}`,
+      type: 'entity_pathfind_to',
+      category: 'action',
+      title: 'Attempt to make entity find path and move to',
+      values: [
+        { name: 'entity', block: parseExpressionToAST(target, idSeq * 10 + 1) },
+        { name: 'x', block: parseExpressionToAST(x, idSeq * 10 + 2) },
+        { name: 'y', block: parseExpressionToAST(y, idSeq * 10 + 3) },
+        { name: 'z', block: parseExpressionToAST(z, idSeq * 10 + 4) },
+        { name: 'speed', block: parseExpressionToAST(spd, idSeq * 10 + 5) },
+      ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
+
+  if (stmt.includes('getNavigation().stop()')) {
+    const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)\./);
+    const target = targetMatch ? targetMatch[1] : 'entity';
+
+    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `stop_nav_${idSeq}`, mcreatorBlock: 'entity_stop_navigation', explanation: 'Stop entity navigation' });
+    return {
+      id: `stop_nav_${idSeq}`,
+      type: 'entity_stop_navigation',
+      category: 'action',
+      title: 'Attempt to stop navigation of entity',
+      values: [
+        { name: 'entity', block: parseExpressionToAST(target, idSeq * 10 + 1) },
+      ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
+
+  if (stmt.includes('.lookAt(')) {
+    const lookMatch = stmt.match(/lookAt\s*\([^,]+,\s*(?:new\s+Vec3\s*\(\s*([^,]+),\s*([^,]+),\s*([^)]+)\s*\)|([^,]+),\s*([^,]+),\s*([^)]+))\)/);
+    const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)\./);
+    const target = targetMatch ? targetMatch[1] : 'entity';
+    const x = lookMatch ? (lookMatch[1] || lookMatch[4] || 'x').trim() : 'x';
+    const y = lookMatch ? (lookMatch[2] || lookMatch[5] || 'y').trim() : 'y';
+    const z = lookMatch ? (lookMatch[3] || lookMatch[6] || 'z').trim() : 'z';
+
+    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `look_${idSeq}`, mcreatorBlock: 'entity_rotate_to_face', explanation: 'Rotate entity to face coordinate' });
+    return {
+      id: `look_${idSeq}`,
+      type: 'entity_rotate_to_face',
+      category: 'action',
+      title: 'Make entity look at coordinate',
+      values: [
+        { name: 'x', block: parseExpressionToAST(x, idSeq * 10 + 1) },
+        { name: 'y', block: parseExpressionToAST(y, idSeq * 10 + 2) },
+        { name: 'z', block: parseExpressionToAST(z, idSeq * 10 + 3) },
+        { name: 'entity', block: parseExpressionToAST(target, idSeq * 10 + 4) },
+      ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
+    };
+  }
+
+  // 17.9 BLOCK SCHEDULE TICK (level.scheduleTick(pos, block, ticks))
+  if (stmt.includes('scheduleTick(')) {
+    const tickMatch = stmt.match(/scheduleTick\s*\([^,]+,\s*[^,]+,\s*([^)]+)\)/);
+    const ticks = tickMatch ? tickMatch[1].trim() : '0';
+
+    breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `sched_${idSeq}`, mcreatorBlock: 'block_schedule_tick', explanation: 'Schedule tick update of block' });
+    return {
+      id: `sched_${idSeq}`,
+      type: 'block_schedule_tick',
+      category: 'block',
+      title: 'Schedule tick update of block',
+      values: [
+        { name: 'x', block: { id: `x_${idSeq}`, type: 'coord_x', category: 'world', title: 'x' } },
+        { name: 'y', block: { id: `y_${idSeq}`, type: 'coord_y', category: 'world', title: 'y' } },
+        { name: 'z', block: { id: `z_${idSeq}`, type: 'coord_z', category: 'world', title: 'z' } },
+        { name: 'ticks', block: parseExpressionToAST(ticks, idSeq * 10 + 1) },
+      ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
     };
   }
 
@@ -3390,7 +3897,11 @@ function parseIfStatement(
   if (
     branches.length === 1 &&
     elseBody === null &&
-    (branches[0].cond.includes('LivingDeathEvent') || branches[0].cond.includes('Event _') || branches[0].cond.includes('getSource().getEntity()'))
+    !branches[0].cond.includes("isClientSide") &&
+    !branches[0].cond.includes("getMainHandItem") &&
+    !branches[0].cond.includes("getItemInHand") &&
+    !branches[0].cond.includes("getBlockState") &&
+    (branches[0].cond.includes("LivingDeathEvent") || branches[0].cond.includes("Event _") || branches[0].cond.includes("getSource().getEntity()"))
   ) {
     breakdown.push({
       javaLine: stmt.trim().split('\n')[0],
@@ -3839,7 +4350,89 @@ function parseReturnStatement(
 /* -------------------------------------------------------------------------- */
 
 export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode {
+  rawExpr = unwrapMCreatorBoilerplate(rawExpr);
   let expr = rawExpr.trim();
+  if (expr.endsWith(";")) expr = expr.slice(0, -1).trim();
+
+  // Normalize newlines in boolean expressions to spaces before binary splitting
+  expr = expr.replace(/\s*\n\s*/g, " ");
+
+  // Strip redundant outer parentheses before splitting top-level operators
+  while (expr.startsWith("(") && expr.endsWith(")")) {
+    let depth = 0;
+    let enclosed = true;
+    for (let i = 0; i < expr.length - 1; i++) {
+      if (expr[i] === "(") depth++;
+      else if (expr[i] === ")") {
+        depth--;
+        if (depth === 0) { enclosed = false; break; }
+      }
+    }
+    if (enclosed) {
+      expr = expr.substring(1, expr.length - 1).trim();
+    } else {
+      break;
+    }
+  }
+
+  // 0.05 ITEM TAG CHECK (compare_mcitems_oredictionary)
+  // e.g. entity.getMainHandItem().is(ItemTags.create(ResourceLocation.parse("minecraft:axes")))
+  if (!expr.includes(" || ") && !expr.includes(" && ") && expr.includes(".is(ItemTags.create(")) {
+    const dotIs = expr.indexOf(".is(ItemTags.create(");
+    const rawStack = expr.substring(0, dotIs).trim();
+    const rest = expr.substring(dotIs);
+    const quoteMatch = rest.match(/["']([^"']+)["']/);
+    const tagArg = quoteMatch ? quoteMatch[1] : "minecraft:logs";
+
+    let itemAST: any = { id: `item_hand_${seq}`, type: "entity_iteminhand", category: "entity", title: "Item in main-hand of", values: [{ name: "entity", block: { id: `ent_dep_${seq}`, type: "entity_from_deps", category: "entity", title: "Event/target entity" } }] };
+    if (rawStack.includes("getOffhandItem")) {
+      itemAST = { id: `item_offhand_${seq}`, type: "entity_iteminoffhand", category: "entity", title: "Item in off-hand of", values: [{ name: "entity", block: { id: `ent_dep_${seq}`, type: "entity_from_deps", category: "entity", title: "Event/target entity" } }] };
+    } else if (rawStack.includes("itemstack") || rawStack.includes("item")) {
+      itemAST = { id: `prov_item_${seq}`, type: "provided_itemstack", category: "item", title: "Provided itemstack" };
+    }
+    return {
+      id: `item_tag_${seq}`,
+      type: "compare_mcitems_oredictionary",
+      category: "item",
+      title: "Is item tagged in item tags as",
+      values: [
+        { name: "a", block: itemAST },
+        { name: "b", block: { id: `tag_txt_${seq}`, type: "text", category: "text", title: `"${tagArg}"`, fields: { TEXT: tagArg } } },
+      ],
+    };
+  }
+
+  // Split top-level || or && operators (depth = 0)
+  const isOr = expr.includes(" || ");
+  const isAnd = !isOr && expr.includes(" && ");
+  if (isOr || isAnd) {
+    const opStr = isOr ? " || " : " && ";
+    let depth = 0;
+    let splitIdx = -1;
+    for (let i = 0; i <= expr.length - opStr.length; i++) {
+      if (expr[i] === "(") depth++;
+      else if (expr[i] === ")") depth--;
+      else if (depth === 0 && expr.substring(i, i + opStr.length) === opStr) {
+        splitIdx = i;
+        break;
+      }
+    }
+    if (splitIdx !== -1) {
+      const leftExpr = expr.substring(0, splitIdx).trim();
+      const rightExpr = expr.substring(splitIdx + opStr.length).trim();
+      return {
+        id: `log_bin_${seq}`,
+        type: "logic_binary",
+        category: "logic",
+        title: isOr ? "OR" : "AND",
+        fields: { OP: isOr ? "OR" : "AND" },
+        values: [
+          { name: "A", block: parseExpressionToAST(leftExpr, seq * 10 + 1) },
+          { name: "B", block: parseExpressionToAST(rightExpr, seq * 10 + 2) },
+        ],
+      };
+    }
+  }
 
   // Strip trailing semicolon if present
   if (expr.endsWith(';')) {
@@ -4133,6 +4726,8 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
     return parseExpressionToAST(uncast, seq);
   }
 
+
+
   // 0.1 ENTITY TAG CHECK: entity_is_tagged_in
   // e.g. entity.getType().is(TagKey.create(Registries.ENTITY_TYPE, ResourceLocation.parse("the_backwoods:woodbound_entities")))
   // e.g. entityiterator.getType().is(TagKey.create(Registries.ENTITY_TYPE, ...))
@@ -4156,6 +4751,64 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
         { name: 'entity', block: entAST },
         { name: 'tag', block: { id: `tag_txt_${seq}`, type: 'text', category: 'text', title: `"${tagArg}"`, fields: { TEXT: tagArg } } },
       ],
+    };
+  }
+
+  // 0.17 DAMAGE SOURCE IS TAGGED IN (damagesource_is_tagged_in)
+  // e.g. damagesource.is(DamageTypeTags.IS_FIRE)  or  damagesource.is(TagKey.create(Registries.DAMAGE_TYPE, ...))
+  if (expr.includes("DamageTypeTags.") || (expr.includes("Registries.DAMAGE_TYPE") && expr.includes(".is("))) {
+    const tagMatch = expr.match(/DamageTypeTags\.([A-Za-z0-9_]+)/) || expr.match(/ResourceLocation\.(?:parse|fromNamespaceAndPath)?\(?["\x27]([^"\x27]+)["\x27]\)?/);
+    const tagArg = tagMatch ? (tagMatch[1] || tagMatch[2]).toLowerCase() : "minecraft:is_fire";
+    const srcMatch = expr.match(/^([a-zA-Z0-9_.]+)\.is\(/);
+    const rawSrc = srcMatch ? srcMatch[1] : "damagesource";
+    return {
+      id: `dmg_tag_${seq}`,
+      type: "damagesource_is_tagged_in",
+      category: "damage",
+      title: "Is type of damage source tagged in damage type tags as",
+      values: [
+        { name: "damagesource", block: parseExpressionToAST(rawSrc, seq * 10 + 1) },
+        { name: "tag", block: { id: `tag_txt_${seq}`, type: "text", category: "text", title: `"${tagArg}"`, fields: { TEXT: tagArg } } },
+      ],
+    };
+  }
+
+  // 0.18 ITEMSTACK IS DAMAGEABLE (itemstack_is_damageable)
+  if (expr.includes(".isDamageableItem()") || expr.includes(".isDamageable(")) {
+    const itemMatch = expr.match(/^([a-zA-Z0-9_.]+)\.isDamageable/);
+    const rawItem = itemMatch ? itemMatch[1] : "itemstack";
+    return {
+      id: `item_dmgable_${seq}`,
+      type: "itemstack_is_damageable",
+      category: "item",
+      title: "Is itemstack damageable",
+      values: [{ name: "item", block: parseExpressionToAST(rawItem, seq * 10 + 1) }],
+    };
+  }
+
+  // 0.19 ITEMSTACK IS DAMAGED (itemstack_is_damaged)
+  if (expr.includes(".isDamaged()")) {
+    const itemMatch = expr.match(/^([a-zA-Z0-9_.]+)\.isDamaged/);
+    const rawItem = itemMatch ? itemMatch[1] : "itemstack";
+    return {
+      id: `item_dmged_${seq}`,
+      type: "itemstack_is_damaged",
+      category: "item",
+      title: "Is itemstack damaged",
+      values: [{ name: "item", block: parseExpressionToAST(rawItem, seq * 10 + 1) }],
+    };
+  }
+
+  // 0.04 FALL DISTANCE CHECK (entity_get_fall)
+  if (expr.includes(".fallDistance") || expr === "entity.fallDistance") {
+    const entMatch = expr.match(/^([a-zA-Z0-9_.]+)\.fallDistance/);
+    const rawEnt = entMatch ? entMatch[1] : "entity";
+    return {
+      id: `fall_dist_${seq}`,
+      type: "entity_get_fall",
+      category: "entity",
+      title: "Get fall distance of",
+      values: [{ name: "entity", block: parseExpressionToAST(rawEnt, seq * 10 + 1) }],
     };
   }
 
