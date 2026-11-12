@@ -130,14 +130,12 @@ export function translateJavaToMCreator(
   const variables: VariableDecl[] = [];
   const dependencies = new Set<string>();
 
-  // 1. Extract all methods from the Java class (robustly with balanced braces and comments removed)
   const detectedMethods = extractClassMethods(code);
 
   let activeMethodName = selectedMethodName;
   let activeBody = '';
   let activeMethod: DetectedMethod | undefined;
 
-  // Find candidate execute methods that contain real logic (not just 1-line delegators)
   const executeMethods = detectedMethods.filter(m => m.name === 'execute');
   const realExecuteMethod = executeMethods.length > 0
     ? [...executeMethods].sort((a, b) => b.body.length - a.body.length)[0]
@@ -150,8 +148,6 @@ export function translateJavaToMCreator(
       activeMethod = detectedMethods.find(m => m.signature === activeMethodName || m.name === activeMethodName);
     }
 
-    // Check if the selected method is merely an MCreator event bridge or delegator calling execute(...)
-    // e.g. "onPlayerTick" that only contains "execute(event, event.getEntity());" or "execute(null, entity);"
     const isDelegator = activeMethod && (
       /^execute\s*\([\s\S]*?\);?$/.test(activeMethod.body.trim().replace(/\/\/.*$/gm, '').trim())
     );
@@ -162,7 +158,6 @@ export function translateJavaToMCreator(
       }
       activeMethod = realExecuteMethod;
     }
-    // Always scan detected subscriber methods for global event trigger
     const subMethod = detectedMethods.find(m => m.eventTrigger || (m.signature && m.signature.includes("@SubscribeEvent")));
     if (subMethod && subMethod.eventTrigger && !bridgeTrigger) {
       bridgeTrigger = subMethod.eventTrigger;
@@ -179,7 +174,6 @@ export function translateJavaToMCreator(
         if (realExecuteMethod && realExecuteMethod.body.length > 20) {
           activeMethod = realExecuteMethod;
         } else {
-          // Prioritize method with largest body
           activeMethod = [...detectedMethods].sort((a, b) => b.body.length - a.body.length)[0];
         }
       }
@@ -196,12 +190,8 @@ export function translateJavaToMCreator(
     activeMethodName = activeMethodName || 'execute';
   }
 
-  // Normalize dependency aliases: strip declarations and unify variable names
-  // e.g. "Player player = event.getEntity();" → remove line, replace "player." → "entity."
-  // e.g. "Level world = event.getLevel();" → remove line, replace "world." → "level."
   activeBody = normalizeDependencyAliases(activeBody);
 
-  // 2. Detect Event Listener & Dependencies from Java code and active method
   let detectedEventTrigger = userEventOverride && userEventOverride !== 'auto'
     ? userEventOverride
     : 'no_ext_trigger';
@@ -225,7 +215,6 @@ export function translateJavaToMCreator(
       detectedEventTrigger = 'entity_dies';
     }
 
-    // Populate dependencies based on trigger and code references
     if (code.includes('LevelAccessor') || code.includes('world') || code.includes('level')) {
       dependencies.add('world');
     }
@@ -264,7 +253,6 @@ export function translateJavaToMCreator(
     dependencies.add('world');
   }
 
-  // 3. Create Root Node
   let rootNode: BlockASTNode;
   if (elementType === 'procedure') {
     rootNode = {
@@ -309,7 +297,6 @@ export function translateJavaToMCreator(
     };
   }
 
-  // 4. Parse statements into structurally faithful AST nodes
   let bodyBaseLine = 1;
   if (activeMethod?.bodyStartLine) {
     bodyBaseLine = activeMethod.bodyStartLine;
@@ -327,7 +314,6 @@ export function translateJavaToMCreator(
     const stmtObj = rawStatementsWithLoc[idx];
     const s = stmtObj.text.trim();
 
-    // Skip MCreator preamble null-guard clauses (e.g. if (entity == null) return; or if (entity == null) return false; etc.)
     const isNullGuard =
       /^if\s*\((?:\s*(?:entity|world|level|_level|sourceentity|immediatesourceentity|itemstack|blockstate|null)\s*==\s*null\s*(?:\|\|\s*)?)+\)\s*(?:return(?:\s+(?:false|true|null|0))?;|\{\s*return(?:\s+(?:false|true|null|0))?;\s*\})$/.test(s) ||
       /^if\s*\((?:entity|world|level|_level|sourceentity)\s*==\s*null\)/.test(s);
@@ -342,7 +328,6 @@ export function translateJavaToMCreator(
       continue;
     }
 
-    // Check for MCreator local variable initial declaration e.g. "double slot = 0;"
     const varDeclMatch = s.match(/^(?:double|float|int|long|boolean|String|ItemStack)\s+([a-zA-Z0-9_]+)\s*=\s*([^;]+);?$/);
     if (varDeclMatch) {
       const vName = varDeclMatch[1];
@@ -358,8 +343,6 @@ export function translateJavaToMCreator(
         variables.push({ name: vName, type: vType, initialValue: vInitial });
       }
 
-      // If a subsequent statement in this procedure re-assigns or sets this variable,
-      // skip the declaration line so only the explicit setter or logic block is visually placed.
       const hasSubsequentAssignment = rawStatementsWithLoc.slice(idx + 1).some(sub => {
         return sub.text.includes(`${vName} =`) || sub.text.includes(`${vName}=`);
       });
@@ -390,7 +373,6 @@ export function translateJavaToMCreator(
     }
   }
 
-  // Connect nodes linearly or in statements
   if (elementType === 'ai_task') {
     rootNode.statements = [{ name: 'tasks', block: nodes.length > 0 ? chainNodes(nodes) : undefined }];
   } else if (elementType === 'command') {
@@ -412,10 +394,8 @@ export function translateJavaToMCreator(
     };
   }
 
-  // 5. Generate Valid Blockly XML
   const blocklyXml = generateBlocklyXmlFromAST(rootNode, elementConfig.extension, detectedEventTrigger, variables);
 
-  // 6. Version Info
   const neoForgeVersionNotes = getNeoForgeVersionInfo(neoForgeVersion);
 
   return {
@@ -437,9 +417,6 @@ export function translateJavaToMCreator(
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/*                       Statement Extractor & Parser                         */
-/* -------------------------------------------------------------------------- */
 
 export interface StatementWithLocation {
   text: string;
@@ -447,20 +424,7 @@ export interface StatementWithLocation {
   endLine: number;
 }
 
-/* -------------------------------------------------------------------------- */
-/*              Dependency Alias Normalization (Pre-processing pass)           */
-/* -------------------------------------------------------------------------- */
 
-/**
- * Normalize dependency aliases in a Java method body:
- * - Strips lines like `Player player = event.getEntity();`
- * - Replaces usages like `player.getHealth()` → `entity.getHealth()`
- * - Strips lines like `Level world = event.getLevel();`
- * - Replaces usages like `world.playSound(...)` → `level.playSound(...)`
- */
-/**
- * Unwraps guarded method calls with balanced parentheses.
- */
 function unwrapGuardedMethod(code: string, guardPattern: RegExp, methodName: string, targetOverride?: string): string {
   let res = code;
   let idx = 0;
@@ -499,37 +463,24 @@ function unwrapGuardedMethod(code: string, guardPattern: RegExp, methodName: str
   return res;
 }
 
-/**
- * Unwraps MCreator Java code generator boilerplate, transforming raw NeoForge compiled
- * output idioms back into clean, high-level procedure expressions.
- */
 function unwrapMCreatorBoilerplate(text: string): string {
   let s = text;
 
-  // -1. Strip procedure entry dependency null check:
-  // if (entity == null || sourceentity == null) return;
-  // if (world == null || entity == null) return;
   s = s.replace(
     /^\s*if\s*\(\s*(?:entity|sourceentity|world|level|_level|immediatesourceentity)\s*==\s*null(?:\s*\|\|\s*(?:entity|sourceentity|world|level|_level|immediatesourceentity)\s*==\s*null)*\s*\)\s*return\s*;\s*$/gm,
     ''
   );
 
-  // -0.6. Unwrap inline LivingEntity hasEffect boilerplate:
-  // (entity instanceof LivingEntity _livEnt1 && _livEnt1.hasEffect(...)) -> entity.hasEffect(...)
   s = s.replace(
     /\(?\s*([a-zA-Z0-9_.]+)\s+instanceof\s+LivingEntity\s+([_a-zA-Z0-9]+)\s*&&\s*\2\.hasEffect\(([^)]+)\)\s*\)?/g,
     (_, ent, _alias, pot) => `${ent}.hasEffect(${pot.trim()})`
   );
 
-  // -0.5. Unwrap entity despawn guard:
-  // if (!entity.level().isClientSide()) entity.discard();
-  // if (!_ent.level().isClientSide()) _ent.discard();
   s = s.replace(
     /if\s*\(\s*!([a-zA-Z0-9_.]+)\.level\(\)\.isClientSide\(\)\s*\)\s*\{?\s*\1\.discard\(\)\s*;?\s*\}?/g,
     (_, ent) => `${ent}.discard();`
   );
 
-  // -0.45. Unwrap ServerPlayer entity_switch_dimension boilerplate sequence:
   s = s.replace(
     /if\s*\(\s*([a-zA-Z0-9_.]+)\s+instanceof\s+ServerPlayer\s+([_a-zA-Z0-9]+)\s*&&\s*!\2\.level\(\)\.isClientSide\(\)\s*\)\s*\{\s*ResourceKey<Level>\s*destinationType\s*=\s*([^;]+);[\s\S]*?teleportTo\(nextLevel[\s\S]*?\}\s*\}/g,
     (_, ent, _player, resKeyExpr) => {
@@ -537,80 +488,53 @@ function unwrapMCreatorBoilerplate(text: string): string {
     }
   );
 
-  // -0.4. Unwrap ServerLevel sendParticles & performPrefixedCommand guards:
-  // if (world instanceof ServerLevel _level) _level.sendParticles(...)
   s = unwrapGuardedMethod(s, /if\s*\(\s*(?:world|level)\s+instanceof\s+ServerLevel\s+([_a-zA-Z0-9]+)\s*\)\s*\{?\s*\1\./, 'sendParticles', '_level');
   s = s.replace(
     /if\s*\(\s*(?:world|level|_level)\s+instanceof\s+ServerLevel\s+([_a-zA-Z0-9]+)\s*\)\s*\{?\s*\1\.getServer\(\)\.getCommands\(\)\.performPrefixedCommand\(([\s\S]*?)\);?\s*\}?/g,
     (_, _lvl, args) => `performPrefixedCommand(${args});`
   );
 
-  // -0.3. Unwrap LivingEntity addEffect potion guard with balanced parentheses:
-  // if (sourceentity instanceof LivingEntity _entity && !_entity.level().isClientSide()) _entity.addEffect(...)
   s = unwrapGuardedMethod(s, /if\s*\(\s*([a-zA-Z0-9_.]+)\s+instanceof\s+LivingEntity\s+([_a-zA-Z0-9]+)\s*&&\s*!\2\.level\(\)\.isClientSide\(\)\s*\)\s*\{?\s*\2\./, 'addEffect', '$1');
 
-  // -0.28. Unwrap custom entity data parameter setters:
-  // if (entity instanceof LignumGigasEntity _datEntSetL) _datEntSetL.getEntityData().set(...) -> entity.getEntityData().set(...)
   s = s.replace(
     /if\s*\(\s*([a-zA-Z0-9_.]+)\s+instanceof\s+([a-zA-Z0-9_]+)\s+([a-zA-Z0-9_]+)\s*\)\s*\{?\s*\3\.getEntityData\(\)\.set\(([\s\S]*?)\);?\s*\}?/g,
     (_, ent, _class, _alias, args) => `${ent}.getEntityData().set(${args});`
   );
 
-  // -0.26. Unwrap LivingEntity attribute base value setters:
-  // if (entity instanceof LivingEntity _livingEntity3 && _livingEntity3.getAttributes().hasAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY)) _livingEntity3.getAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY).setBaseValue(1); -> entity.getAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY).setBaseValue(1);
   s = s.replace(
     /if\s*\(\s*([a-zA-Z0-9_.]+)\s+instanceof\s+LivingEntity\s+([_a-zA-Z0-9]+)\s*&&\s*\2\.getAttributes\(\)\.hasAttribute\(([^)]+)\)\s*\)\s*\{?\s*\2\.getAttribute\(\3\)\.setBaseValue\(([^)]+)\);?\s*\}?/g,
     (_, ent, _alias, attr, val) => `${ent}.getAttribute(${attr}).setBaseValue(${val});`
   );
 
-  // -0.2. Unwrap Level playSound / playLocalSound dual client/server guard:
-  // if (world instanceof Level _level) { if (!_level.isClientSide()) { ... } else { ... } }
   s = s.replace(
     /if\s*\(\s*(?:world|level)\s+instanceof\s+Level\s+([_a-zA-Z0-9]+)\s*\)\s*\{\s*if\s*\(\s*!\1\.isClientSide\(\)\s*\)\s*\{([\s\S]*?)\}\s*else\s*\{[\s\S]*?\}\s*\}/g,
     (_, _lvl, serverSideBody) => serverSideBody.trim()
   );
 
-  // -0.1. Unwrap ICancellableEvent boilerplate:
   s = s.replace(
     /if\s*\(\s*event\s+instanceof\s+ICancellableEvent\s+([_a-zA-Z0-9]+)\s*\)\s*\{\s*\1\.setCanceled\(true\);\s*\}/g,
     "event.setCanceled(true);"
   );
 
-  // -0.05 Unwrap property-transfer block_replace sequence with keep state = true:
   s = s.replace(
     /BlockPos\s+([_a-zA-Z0-9]+)\s*=\s*BlockPos\.containing\([^)]+\);?\s*BlockState\s+([_a-zA-Z0-9]+)\s*=\s*([A-Za-z0-9_.]+(?:\.defaultBlockState\(\))?);?\s*BlockState\s+([_a-zA-Z0-9]+)\s*=\s*(?:world|level)\.getBlockState\(\s*\1\s*\);?\s*for\s*\(\s*Property<\?>\s*[_a-zA-Z0-9]+\s*:\s*\4\.getProperties\(\)\s*\)[\s\S]*?(?:world|level)\.setBlock\(\s*\1\s*,\s*\2\s*,\s*3\s*\);?/g,
     (_, _bp, bs) => `world.setBlock_keepState(${bs});`
   );
 
-  // 0. Unwrap statement-level instanceof defensive type guard wrappers:
-  // if (entity instanceof Player _player) _player.causeFoodExhaustion(-1); -> entity.causeFoodExhaustion(-1);
-  // if (entity instanceof Player _player) _player.giveExperiencePoints(10); -> entity.giveExperiencePoints(10);
-  // if (entity instanceof Player _player) _player.getFoodData().setFoodLevel(20); -> entity.setFoodLevel(20);
-  // if (entity instanceof LivingEntity _entity) _entity.setHealth(10); -> entity.setHealth(10);
-  // if (entity instanceof LivingEntity _entity) _entity.swing(InteractionHand.MAIN_HAND, true); -> entity.swing(InteractionHand.MAIN_HAND, true);
-  // if (entity instanceof Player _player) _player.closeContainer(); -> entity.closeContainer();
-  // Case A: with braces
   s = s.replace(
     /if\s*\(\s*([a-zA-Z0-9_.]+)\s+instanceof\s+(?:Player|ServerPlayer|LivingEntity|Entity|Mob)\s+([a-zA-Z0-9_]+)\s*\)\s*\{\s*\2\.([a-zA-Z0-9_.]+(?:\(\)[a-zA-Z0-9_.]*)*)\s*\(([\s\S]*?)\)\s*;?\s*\}/g,
     (_, ent, _alias, method, args) => `${ent}.${method}(${args});`
   );
-  // Case B: without braces
   s = s.replace(
     /if\s*\(\s*([a-zA-Z0-9_.]+)\s+instanceof\s+(?:Player|ServerPlayer|LivingEntity|Entity|Mob)\s+([a-zA-Z0-9_]+)\s*\)(?!\s*\{)\s*\2\.([a-zA-Z0-9_.]+(?:\(\)[a-zA-Z0-9_.]*)*)\s*\(([\s\S]*?)\)\s*;/g,
     (_, ent, _alias, method, args) => `${ent}.${method}(${args});`
   );
 
-  // 1. Unwrap inline instanceof casts inside ternaries:
-  // (entity instanceof LivingEntity _livEnt ? _livEnt.getHealth() : -1) -> entity.getHealth()
-  // (entity instanceof Player _plr ? _plr.getFoodData().getFoodLevel() : 0) -> entity.getFoodData().getFoodLevel()
-  // (entity instanceof LivingEntity _livEnt ? _livEnt.getMainHandItem() : ItemStack.EMPTY) -> entity.getMainHandItem()
   s = s.replace(
     /\(\s*([a-zA-Z0-9_.]+)\s+instanceof\s+[a-zA-Z0-9_.]+\s+([a-zA-Z0-9_]+)\s*\?\s*\2\.((?:[a-zA-Z0-9_.]+(?:\([^()]*\))*)+)\s*:\s*(?:ItemStack\.EMPTY|false|true|-?\d+(?:\.\d+)?f?|null|"[^"]*"|'[^']*')\s*\)/g,
     (_, ent, _alias, call) => `${ent}.${call.trim()}`
   );
 
-  // 2. Unwrap ResourceKey / ResourceLocation dimension lookups:
-  // ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse("the_backwoods:backwoods")) -> "CUSTOM:Backwoods"
   s = s.replace(
     /ResourceKey\.create\(\s*Registries\.DIMENSION\s*,\s*ResourceLocation\.(?:parse|fromNamespaceAndPath)\(\s*["']([^"']+)["']\s*\)\s*\)/g,
     (_, res) => {
@@ -620,15 +544,11 @@ function unwrapMCreatorBoilerplate(text: string): string {
     }
   );
 
-  // 3. Unwrap world server/client checks that MCreator generates for sound / particles / blocks:
-  // if (world instanceof Level _level) { if (!_level.isClientSide()) { ... } else { ... } }
   s = s.replace(
     /if\s*\(\s*(?:world|level)\s+instanceof\s+Level\s+_level\s*\)\s*\{\s*if\s*\(\s*!_level\.isClientSide\(\)\s*\)\s*\{([\s\S]*?)\}\s*else\s*\{[\s\S]*?\}\s*\}/g,
     (_, serverSideBody) => serverSideBody.trim()
   );
 
-  // 4. Unwrap SoundEvent / BuiltInRegistries lookup in playSound:
-  // BuiltInRegistries.SOUND_EVENT.get(ResourceLocation.parse("the_backwoods:wood_creak_paranoia")) -> "wood_creak_paranoia"
   s = s.replace(
     /BuiltInRegistries\.SOUND_EVENT\.(?:get|getValue)\(\s*(?:ResourceLocation|Identifier)\.(?:parse|fromNamespaceAndPath)\(\s*["']([^"']+)["']\s*\)\s*\)/g,
     (_, soundLoc) => {
@@ -637,10 +557,8 @@ function unwrapMCreatorBoilerplate(text: string): string {
     }
   );
 
-  // 5. Unwrap SoundSource enum: SoundSource.AMBIENT -> "ambient"
   s = s.replace(/SoundSource\.([A-Z_]+)/g, (_, src) => '"' + src.toLowerCase() + '"');
 
-  // 6. Unwrap BlockPos.containing(x, y, z) -> x, y, z with balanced parentheses
   const needle = 'BlockPos.containing(';
   let bpIdx = 0;
   while ((bpIdx = s.indexOf(needle, bpIdx)) !== -1) {
@@ -666,7 +584,6 @@ function unwrapMCreatorBoilerplate(text: string): string {
     }
   }
 
-  // 7. Strip float casts: (float) expr -> expr
   s = s.replace(/\(float\)\s*/g, '');
 
   return s;
@@ -677,7 +594,6 @@ function normalizeDependencyAliases(body: string): string {
   const depAliasRegex = /^\s*(?:Player|LivingEntity|Entity|Level|ServerLevel|LevelAccessor|BlockPos)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*[^;]+;\s*$/gm;
   const aliases: Record<string, string> = {};
 
-  // First pass: collect aliases and their canonical mappings
   let m: RegExpExecArray | null;
   depAliasRegex.lastIndex = 0;
   while ((m = depAliasRegex.exec(body)) !== null) {
@@ -690,10 +606,8 @@ function normalizeDependencyAliases(body: string): string {
     }
   }
 
-  // Remove the alias declaration lines
   let result = body.replace(depAliasRegex, '');
 
-  // Replace usages: player.getHealth() → entity.getHealth(), world.playSound → level.playSound, etc.
   for (const [alias, canonical] of Object.entries(aliases)) {
     if (alias !== canonical) {
       result = result.replace(new RegExp(`\\b${alias}\\.`, 'g'), `${canonical}.`);
@@ -703,9 +617,6 @@ function normalizeDependencyAliases(body: string): string {
   return result;
 }
 
-/**
- * Splits a comma-separated argument string respecting nested parentheses and brackets.
- */
 function splitArgs(argsStr: string): string[] {
   const args: string[] = [];
   let depth = 0;
@@ -724,9 +635,6 @@ function splitArgs(argsStr: string): string[] {
   return args;
 }
 
-/**
- * Robustly extracts all class methods, balancing braces and safely ignoring comments and strings.
- */
 export function extractClassMethods(code: string): DetectedMethod[] {
   const classIdx = code.search(/\bclass\s+[A-Za-z0-9_]+/);
   if (classIdx === -1) return [];
@@ -965,10 +873,6 @@ function extractFallbackMethodBody(code: string): string {
   return code.trim();
 }
 
-/**
- * Splits Java statements cleanly using a balanced scanner that respects braces,
- * strings, comments, and chained else if / else statements, providing accurate line locations.
- */
 export function splitStatementsWithLocations(code: string, baseLineNumber: number = 1): StatementWithLocation[] {
   const result: StatementWithLocation[] = [];
   let buffer = '';
@@ -1075,9 +979,6 @@ export function splitStatementsSmart(code: string): string[] {
   return splitStatementsWithLocations(code, 1).map(s => s.text);
 }
 
-/**
- * Backward compatibility alias for splitIntoStatements
- */
 function splitIntoStatements(code: string): string[] {
   return splitStatementsSmart(code);
 }
@@ -1395,7 +1296,6 @@ function parseInventoryForeachStatement(
 ): BlockASTNode {
   const isBlock = stmt.includes('Capabilities.ItemHandler.BLOCK') || stmt.includes('ItemHandler.BLOCK');
 
-  // Extract body of the for loop
   const forIdx = stmt.indexOf('for');
   const forCode = forIdx !== -1 ? stmt.substring(forIdx) : stmt;
   const loopBody = extractBlockBody(forCode);
@@ -1410,8 +1310,6 @@ function parseInventoryForeachStatement(
   }
 
   const rawLoopStmts = splitStatementsWithLocations(loopBody, bodyLine);
-  // Filter out the initial iterator copy assignment:
-  // e.g. "ItemStack itemstackiterator = _modHandlerIter.getStackInSlot(_idx).copy();"
   const innerStmts = rawLoopStmts.filter(s => {
     const trimmed = s.text.trim();
     return !trimmed.startsWith('ItemStack itemstackiterator') && !trimmed.startsWith('ItemStack _setstack');
@@ -1478,7 +1376,6 @@ function parseInventorySetSlotStatement(
 ): BlockASTNode {
   const isBlock = stmt.includes('Capabilities.ItemHandler.BLOCK') || stmt.includes('ItemHandler.BLOCK');
 
-  // 1. Extract Slot Index e.g. _modHandler.setStackInSlot((int) slot, _setstack);
   let slotNode: BlockASTNode = {
     id: `num_slot_${idSeq}`,
     type: 'math_number',
@@ -1492,7 +1389,6 @@ function parseInventorySetSlotStatement(
     slotNode = parseExpressionToAST(rawSlot, idSeq * 10 + 1);
   }
 
-  // 2. Extract Amount e.g. _setstack.setCount(itemstackiterator.getCount());
   let amountNode: BlockASTNode = {
     id: `num_cnt_${idSeq}`,
     type: 'math_number',
@@ -1506,7 +1402,6 @@ function parseInventorySetSlotStatement(
     amountNode = parseExpressionToAST(rawCount, idSeq * 10 + 2);
   }
 
-  // 3. Extract Item e.g. new ItemStack(TheBackwoodsModBlocks.PETRIFIED_ROTTEN_OAK_WOOD.get()).copy()
   let itemNode: BlockASTNode = {
     id: `item_slot_${idSeq}`,
     type: 'mcitem_all',
@@ -1597,7 +1492,6 @@ function parseAdvancementStatement(
 ): BlockASTNode {
   const isRevoke = stmt.includes('.revoke(');
 
-  // Extract advancement ResourceLocation
   let advId = 'CUSTOM:Advancement';
   const resMatch =
     stmt.match(/ResourceLocation\.parse\("([^"]+)"\)/) ||
@@ -1621,7 +1515,6 @@ function parseAdvancementStatement(
     advId = `CUSTOM:${pascal}`;
   }
 
-  // Extract target entity
   let targetEntity: BlockASTNode = {
     id: `src_ent_${idSeq}`,
     type: 'source_entity_from_deps',
@@ -1664,9 +1557,6 @@ function parseAdvancementStatement(
   };
 }
 
-/**
- * Parses a single statement into an AST block
- */
 function parseJavaStatement(
   rawStmt: string,
   idSeq: number,
@@ -1896,8 +1786,6 @@ function parseMoveEntityStatement(
       }
       if (cur.trim()) args.push(cur.trim());
 
-      // If called as teleportTo(level, x, y, z, yRot, xRot) -> 2nd, 3rd, 4th args
-      // If called as teleportTo(x, y, z) -> 1st, 2nd, 3rd args
       if (args.length >= 6 || (args.length >= 4 && (args[0].includes('Level') || args[0].includes('level')))) {
         if (!xMatch && args[1]) xExpr = args[1];
         if (!yMatch && args[2]) yExpr = args[2];
@@ -2190,12 +2078,10 @@ function parseJavaStatementInternal(
 ): BlockASTNode | null {
   const trimmedStmt = stmt.trim();
 
-  // Filter out orphan closing syntax noise: );  });  }  };
   if (!trimmedStmt || /^[\s\}\);]+$/.test(trimmedStmt)) {
     return null;
   }
 
-  // 0.05 DELAY / WAIT TICKS: queueServerWork / wait_ticks (only when statement directly calls queueServerWork or wait)
   const isDirectWaitCall = !trimmedStmt.startsWith('if') && !trimmedStmt.startsWith('for') && !trimmedStmt.startsWith('{') && (
     trimmedStmt.startsWith('queueServerWork(') ||
     trimmedStmt.startsWith('wait(') ||
@@ -2224,11 +2110,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // MCreator ServerPlayer Dimension Teleport pattern:
-  // if (entity instanceof ServerPlayer _player && !_player.level().isClientSide()) {
-  //   ResourceKey<Level> destinationType = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse("the_backwoods:rotting"));
-  //   ...
-  // }
   if (
     (trimmedStmt.includes('destinationType') || trimmedStmt.includes('ClientboundLevelEventPacket') || trimmedStmt.includes('ClientboundGameEventPacket')) &&
     (trimmedStmt.includes('Registries.DIMENSION') || trimmedStmt.includes('dimension() == destinationType') || trimmedStmt.includes('ServerLevel nextLevel'))
@@ -2265,7 +2146,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // Filter out entity registerGoals boilerplate for ai_task
   if (elementType === 'ai_task') {
     if (
       trimmedStmt.startsWith('super.registerGoals') ||
@@ -2277,7 +2157,6 @@ function parseJavaStatementInternal(
     }
   }
 
-  // Filter out command registration boilerplate for command
   if (elementType === 'command') {
     if (
       trimmedStmt.includes('arguments.getSource()') ||
@@ -2293,7 +2172,6 @@ function parseJavaStatementInternal(
     }
   }
 
-  // ServerLevel guard unwrapper or direct spawn statement
   const isServerLevelOnlyWrapper = (
     trimmedStmt.startsWith('if (world instanceof ServerLevel') ||
     trimmedStmt.startsWith('if (_level != null)') ||
@@ -2316,36 +2194,27 @@ function parseJavaStatementInternal(
     }
   }
 
-  // 0.01 ENTITY DATA PARAMETER SETTER GUARD: getEntityData().set(...)
   if (!trimmedStmt.startsWith('if') && !trimmedStmt.startsWith('for') && !trimmedStmt.startsWith('{') && trimmedStmt.includes('.getEntityData().set(')) {
     return parseEntityDataSetStatement(trimmedStmt, idSeq, breakdown, startLine, endLine);
   }
 
-  // 0.02 ENTITY ADD POTION GUARD: only when statement itself is a direct addEffect invocation
   if (!trimmedStmt.startsWith('if') && !trimmedStmt.startsWith('for') && !trimmedStmt.startsWith('{') && (trimmedStmt.includes('.addEffect(') || (trimmedStmt.includes('MobEffectInstance') && !trimmedStmt.includes('hasEffect')))) {
     return parseEntityAddPotionStatement(trimmedStmt, idSeq, breakdown, startLine, endLine);
   }
 
-  // 0.03 ENTITY ATTRIBUTE SETTER GUARD: .getAttribute(...).setBaseValue(...)
   if (!trimmedStmt.startsWith('if') && !trimmedStmt.startsWith('for') && !trimmedStmt.startsWith('{') && trimmedStmt.includes('.getAttribute(') && trimmedStmt.includes('.setBaseValue(')) {
     return parseEntitySetAttributeStatement(trimmedStmt, idSeq, breakdown, startLine, endLine);
   }
 
-  // 0.0 SCOPED BLOCK HANDLING: { ... }
   if (trimmedStmt.startsWith('{') && trimmedStmt.endsWith('}')) {
-    // Check if scoped world_entity_inrange_foreach loop:
-    // e.g. { final Vec3 _center = new Vec3(x, y, z); for (Entity entityiterator : world.getEntitiesOfClass(...) ... ) { ... } }
     if (trimmedStmt.includes('world.getEntitiesOfClass') || trimmedStmt.includes('new AABB(_center, _center).inflate')) {
       return parseWorldEntityInRangeForeach(trimmedStmt, idSeq, variables, breakdown, elementType, startLine, endLine);
     }
 
-    // Check if scoped move_entity block (only when not containing nested if blocks):
     if (!trimmedStmt.includes('if ') && !trimmedStmt.includes('if(') && (trimmedStmt.includes('.teleportTo(') || trimmedStmt.includes('.teleport(') || trimmedStmt.includes('.setPos('))) {
       return parseMoveEntityStatement(trimmedStmt, idSeq, variables, breakdown, startLine, endLine);
     }
 
-    // Check if scoped Entity NBT set statement:
-    // e.g. { Entity _ent = entityiterator; _ent.getPersistentData().putDouble("isEnraged", 1); }
     const scopedNbtMatch = trimmedStmt.match(/\{\s*(?:Entity\s+)?([_a-zA-Z0-9]+)\s*=\s*([^;]+);\s*\1\.getPersistentData\(\)\.(putDouble|putInt|putFloat|putBoolean|putString)\(([^,]+),\s*([^)]+)\);?\s*\}/);
     if (scopedNbtMatch) {
       const rawTarget = scopedNbtMatch[2].trim();
@@ -2355,8 +2224,6 @@ function parseJavaStatementInternal(
       return parseEntityNbtSetStatement(rawTarget, method, keyExpr, valExpr, idSeq, breakdown, startLine, endLine);
     }
 
-    // Check if scoped PlayerVariables setter:
-    // e.g. { TheBackwoodsModVariables.PlayerVariables _vars = entity.getData(TheBackwoodsModVariables.PLAYER_VARIABLES); _vars.music_stopped_s4 = 1; _vars.markSyncDirty(); }
     const scopedPVarMatch = trimmedStmt.match(/\{\s*.*PlayerVariables\s+([_a-zA-Z0-9]+)\s*=\s*([a-zA-Z0-9_]+)\.getData\(.*PLAYER_VARIABLES\);\s*\1\.([a-zA-Z0-9_]+)\s*=\s*([^;]+);(?:\s*\1\.markSyncDirty\(\);)?\s*\}/);
     if (scopedPVarMatch) {
       const rawTarget = scopedPVarMatch[2].trim();
@@ -2390,7 +2257,6 @@ function parseJavaStatementInternal(
     }
 
 
-    // Generic scoped block: unwrap and chain statements
     const innerBody = extractBlockBody(trimmedStmt);
     if (innerBody) {
       const innerStmts = splitStatementsWithLocations(innerBody, startLine);
@@ -2403,13 +2269,10 @@ function parseJavaStatementInternal(
     }
   }
 
-  // Direct move_entity statement without outer braces (only when not an if or for block):
   if (!trimmedStmt.startsWith('if') && !trimmedStmt.startsWith('for') && !trimmedStmt.startsWith('{') && (trimmedStmt.includes('.teleportTo(') || trimmedStmt.includes('.teleport(') || trimmedStmt.includes('.setPos('))) {
     return parseMoveEntityStatement(trimmedStmt, idSeq, variables, breakdown, startLine, endLine);
   }
 
-  // Direct scoped Entity NBT set without outer braces:
-  // e.g. Entity _ent = entityiterator; _ent.getPersistentData().putDouble("isEnraged", 1);
   const directScopedNbtMatch = trimmedStmt.match(/^(?:Entity\s+)?([_a-zA-Z0-9]+)\s*=\s*([^;]+);\s*\1\.getPersistentData\(\)\.(putDouble|putInt|putFloat|putBoolean|putString)\(([^,]+),\s*([^)]+)\);?$/);
   if (directScopedNbtMatch) {
     const rawTarget = directScopedNbtMatch[2].trim();
@@ -2419,61 +2282,49 @@ function parseJavaStatementInternal(
     return parseEntityNbtSetStatement(rawTarget, method, keyExpr, valExpr, idSeq, breakdown, startLine, endLine);
   }
 
-  // 0.1 INVENTORY FOREACH: For each slot of inventory of entity or block
   if (isInventoryForeach(stmt)) {
     return parseInventoryForeachStatement(stmt, idSeq, variables, breakdown, elementType);
   }
 
-  // 0.2 INVENTORY SET SLOT: Set item in slot of inventory
   if (isInventorySetSlot(stmt)) {
     return parseInventorySetSlotStatement(stmt, idSeq, breakdown);
   }
-  // 0.25 ENTITY ADD ITEM: Add item to entity inventory
   if (isEntityAddItem(stmt)) {
     return parseEntityAddItemStatement(stmt, idSeq, breakdown, startLine, endLine);
   }
-  // 0.26 ENTITY CLEAR INVENTORY
   if (isEntityClearInventory(stmt)) {
     return parseEntityClearInventoryStatement(stmt, idSeq, breakdown, startLine, endLine);
   }
-  // 0.27 ENTITY REMOVE ITEM
   if (isEntityRemoveItem(stmt)) {
     return parseEntityRemoveItemStatement(stmt, idSeq, breakdown, startLine, endLine);
   }
 
-  // 0.3 ADVANCEMENTS: Award or revoke advancement
   if (stmt.includes('AdvancementHolder') || stmt.includes('getAdvancements()')) {
     return parseAdvancementStatement(stmt, idSeq, breakdown);
   }
 
-  // 1. IF / ELSE IF / ELSE
   if (stmt.startsWith('if ') || stmt.startsWith('if(')) {
     return parseIfStatement(stmt, idSeq, variables, breakdown, elementType);
   }
 
-  // 2. FOR LOOP: for (int i = 0; i < size; i++) or for (Entity e : ...)
   if (stmt.startsWith('for ') || stmt.startsWith('for(')) {
     return parseForLoopStatement(stmt, idSeq, variables, breakdown, elementType);
   }
 
-  // 3. WHILE LOOP: while (...) { ... }
   if (stmt.startsWith('while ') || stmt.startsWith('while(')) {
     return parseWhileStatement(stmt, idSeq, variables, breakdown, elementType);
   }
 
-  // 4. AI TASK GOAL ADDITIONS: goalSelector.addGoal(...) or targetSelector.addGoal(...) or elementType === 'ai_task'
   if (elementType === 'ai_task' || stmt.includes('goalSelector.addGoal') || stmt.includes('targetSelector.addGoal') || stmt.includes('Goal(') || stmt.includes('Goal>')) {
     if (stmt.includes('goalSelector') || stmt.includes('targetSelector') || stmt.includes('Goal') || elementType === 'ai_task') {
       return parseAIGoalStatement(stmt, idSeq, breakdown);
     }
   }
 
-  // 5. RETURN STATEMENTS: return [expr];
   if (stmt.startsWith('return ') || stmt === 'return;') {
     return parseReturnStatement(stmt, idSeq, breakdown);
   }
 
-  // 6. BREAK / CONTINUE
   if (stmt === 'break;' || stmt === 'break') {
     breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `break_${idSeq}`, mcreatorBlock: 'controls_flow_statements', explanation: 'Break statement' });
     return {
@@ -2497,7 +2348,6 @@ function parseJavaStatementInternal(
 
 
 
-  // 8. LOCAL VARIABLE DECLARATION: Type var = expr;
   const declMatch = stmt.match(/^(?:final\s+)?(double|float|int|long|boolean|String|ItemStack|Entity|Player|Vec3|BlockPos|BlockState)\s+([a-zA-Z0-9_]+)\s*=\s*([\s\S]+?);?$/);
   if (declMatch) {
     const typeStr = declMatch[1];
@@ -2536,7 +2386,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 9. COMPOUND VARIABLE UPDATES: var += expr, var -= expr, var *= expr, var /= expr, var++, var--
   const compMatch = stmt.match(/^([a-zA-Z0-9_]+)\s*(\+=|-=|\*=|\/=)\s*([\s\S]+?);?$/);
   if (compMatch) {
     const varName = compMatch[1];
@@ -2612,7 +2461,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 10. REASSIGNMENT: var = expr;
   const reassignMatch = stmt.match(/^([a-zA-Z0-9_]+)\s*=\s*([\s\S]+?);?$/);
   if (reassignMatch && !stmt.startsWith('if') && !stmt.startsWith('for')) {
     const varName = reassignMatch[1];
@@ -2630,7 +2478,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 11. NBT PUT & REMOVE OPERATIONS (Entity, Block, Item, and CompoundTag)
   if (stmt.includes('.putInt(') || stmt.includes('.putDouble(') || stmt.includes('.putFloat(') || stmt.includes('.putBoolean(') || stmt.includes('.putString(') || (stmt.includes('.remove(') && (stmt.includes('PersistentData') || stmt.includes('Tag') || stmt.includes('CUSTOM_DATA')))) {
     const isNum = stmt.includes('.putInt(') || stmt.includes('.putDouble(') || stmt.includes('.putFloat(');
     const isBool = stmt.includes('.putBoolean(');
@@ -2653,7 +2500,6 @@ function parseJavaStatementInternal(
     const keyAST = parseExpressionToAST(keyExpr, idSeq * 10 + 1);
     const valAST = !isRemove ? parseExpressionToAST(valExpr, idSeq * 10 + 2) : undefined;
 
-    // Detect target context: item, block, custom CompoundTag, or entity
     const isItem = stmt.includes('itemstack') || stmt.includes('itemStack') || stmt.includes('item') || stmt.includes('CUSTOM_DATA') || stmt.includes('CustomData');
     const isBlock = stmt.includes('_blockEntity') || stmt.includes('getBlockEntity') || stmt.includes('blockEntity') || stmt.includes('BlockEntity');
     const isCustomTag = (stmt.match(/^(?:tag|compoundTag|customTag|nbt|_nbt)\./) != null) || (stmt.includes('CompoundTag') && !stmt.includes('PersistentData'));
@@ -2757,7 +2603,6 @@ function parseJavaStatementInternal(
       };
     }
 
-    // Default: Entity NBT
     let target = 'entity';
     const gpdIdx = stmt.indexOf('.getPersistentData()');
     const gcdIdx = stmt.indexOf('.getCustomData()');
@@ -2802,8 +2647,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 11.25 ENTITY DATA PARAMETER SETTERS
-  // if (entity instanceof LignumPalusEntity _datEntSetI) _datEntSetI.getEntityData().set(LignumPalusEntity.DATA_mouth_state, val);
   const dataParamSetMatch = stmt.match(
     /(?:if\s*\(\s*([a-zA-Z0-9_]+)\s+instanceof\s+([a-zA-Z0-9_]+)\s+[a-zA-Z0-9_]+\s*\)\s*)?[a-zA-Z0-9_.]*getEntityData\(\)\.set\(\s*([a-zA-Z0-9_]+)\.DATA_([a-zA-Z0-9_]+)\s*,\s*([\s\S]+)\);?$/
   );
@@ -2844,7 +2687,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // Team set friendly fire: team_set_friendlyfire
   if (stmt.includes('setAllowFriendlyFire(')) {
     const teamMatch = stmt.match(/([a-zA-Z0-9_.]+)\.setAllowFriendlyFire\s*\(\s*([^)]+)\s*\)/);
     const teamExpr = teamMatch ? teamMatch[1].trim() : '"team_name"';
@@ -2862,7 +2704,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 11.5 DEAL DAMAGE / HURT: entity.hurt(...)
   if (stmt.includes('.hurt(')) {
     const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)\.hurt/);
     const target = targetMatch ? targetMatch[1] : 'entity';
@@ -2871,7 +2712,6 @@ function parseJavaStatementInternal(
     let amtExpr = hurtMatch && hurtMatch[2] ? hurtMatch[2].trim() : '1';
 
     if (!hurtMatch || !hurtMatch[2]) {
-      // Single argument hurt(amount) fallback
       amtExpr = dsExpr;
       dsExpr = 'damagesource';
     }
@@ -2890,7 +2730,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 11.6 SPAWN PARTICLES: _level.sendParticles(...) / world.sendParticles(...) / world.addParticle(...)
   if (stmt.includes('.sendParticles(') || stmt.includes('.addParticle(')) {
     const fnName = stmt.includes('.sendParticles(') ? 'sendParticles' : 'addParticle';
     const openParen = stmt.indexOf(fnName + '(') + fnName.length;
@@ -2969,7 +2808,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 11.7 EXPLODE: _level.explode(...) / world.explode(...)
   if (stmt.includes('.explode(')) {
     const expMatch = stmt.match(/\.explode\s*\([^,]+,([^,]+),([^,]+),([^,]+),([^,]+)/);
     const px = expMatch ? expMatch[1].trim() : 'x';
@@ -2993,7 +2831,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 11.8 EXECUTE COMMAND: performPrefixedCommand(...)
   if (stmt.includes('performPrefixedCommand')) {
     const cmdMatch = stmt.match(/performPrefixedCommand\s*\([^,]+,([\s\S]+?)\);?$/);
     const rawCmd = cmdMatch ? cmdMatch[1].trim() : '"say Hello"';
@@ -3015,7 +2852,6 @@ function parseJavaStatementInternal(
       };
     }
 
-    // World / Coordinate-based command: execute_command
     let xExpr = 'x', yExpr = 'y', zExpr = 'z';
     const vecMatch = stmt.match(/new\s+Vec3\s*\(\s*([^,]+),\s*([^,]+),\s*([^)]+)\s*\)/);
     if (vecMatch) {
@@ -3042,7 +2878,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 11.9 SET FIRE / EXTINGUISH / DESPAWN
   if (stmt.includes('setSecondsOnFire') || stmt.includes('igniteForSeconds') || stmt.includes('setRemainingFireTicks')) {
     const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)\./);
     const target = targetMatch ? targetMatch[1] : 'entity';
@@ -3089,7 +2924,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 11.8 SWITCH DIMENSION: entity.switchDimension(...) / changeDimension(...)
   if (stmt.includes('switchDimension') || stmt.includes('changeDimension') || stmt.includes('entity_switch_dimension')) {
     const targetMatch = stmt.match(/^([a-zA-Z0-9_.]+)\.(?:switchDimension|changeDimension)\s*\(([\s\S]+)\);?/);
     let target = 'entity';
@@ -3124,7 +2958,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 12. WORLD BLOCK OPERATIONS: world.setBlock(...) / level.setBlock(...)
   if (stmt.includes('.setBlock(') || stmt.includes('.setBlockAndUpdate(')) {
     const setMatch = stmt.match(/\.setBlock(?:AndUpdate)?\s*\(([^,]+),([^,]+)/);
     const posExpr = setMatch ? setMatch[1].trim() : 'pos';
@@ -3145,7 +2978,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 12.4 BLOCK REPLACE KEEP STATE: world.setBlock_keepState(...)
   if (stmt.includes('world.setBlock_keepState') || stmt.includes('.setBlock_keepState(')) {
     const blockMatch = stmt.match(/([A-Za-z0-9_]+ModBlocks|[A-Za-z0-9_]+Blocks|Blocks)\.([A-Za-z0-9_]+)/);
     const rawBlock = blockMatch ? (blockMatch[1] === 'Blocks' ? `Blocks.${blockMatch[2]}` : blockMatch[2]) : 'Blocks.FLOWER_POT';
@@ -3175,7 +3007,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 12.5 BLOCK REPLACE: world.setBlock(pos, state, 3) where state is defaultBlockState
   if (stmt.includes(".defaultBlockState()") && (stmt.includes("world.setBlock(") || stmt.includes(".setBlock("))) {
     const blockMatch = stmt.match(/([A-Za-z0-9_]+ModBlocks|[A-Za-z0-9_]+Blocks|Blocks)\.([A-Za-z0-9_]+)/);
     const rawBlock = blockMatch ? blockMatch[2] : "DIRT";
@@ -3199,7 +3030,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 13. WORLD DESTROY BLOCK: world.destroyBlock(...) / world.removeBlock(...)
   if (stmt.includes(".destroyBlock(")) {
     const hasParticles = !stmt.includes("false)");
     const blockType = hasParticles ? "block_remove_drop" : "block_remove";
@@ -3235,9 +3065,7 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 14. PLAY SOUND
   if (stmt.includes('playSound') || stmt.includes('play_sound')) {
-    // Find the full balanced argument list using balanced parentheses
     const pIdx = stmt.indexOf('playSound(');
     if (pIdx !== -1) {
       let depth = 0;
@@ -3255,7 +3083,6 @@ function parseJavaStatementInternal(
       let levelExpr = '1', pitchExpr = '1', categoryStr = 'ambient';
 
       if (params[0] === 'null') {
-        // MCreator-generated form: null, x, y, z, SoundEvent, SoundSource, vol, pitch
         const rawSound = (params[4] || '').replace(/SoundEvents\.(CUSTOM_)?/, '').toLowerCase();
         soundName = rawSound ? `CUSTOM:${rawSound}` : 'CUSTOM:sound';
         xExpr = params[1] || 'x';
@@ -3265,7 +3092,6 @@ function parseJavaStatementInternal(
         pitchExpr = params[7] || '1';
         categoryStr = (params[5] || 'ambient').replace(/SoundSource\./, '').toLowerCase();
       } else {
-        // Simple user form: "soundName", x, y, z, vol, pitch, "category"
         soundName = params[0] ? params[0].replace(/"/g, '') : 'sound';
         xExpr = params[1] || 'x';
         yExpr = params[2] || 'y';
@@ -3275,7 +3101,6 @@ function parseJavaStatementInternal(
         categoryStr = params[6] ? params[6].replace(/"/g, '') : 'ambient';
       }
 
-      // Normalize sound name: ensure it has a namespace prefix
       if (!soundName.includes(':')) soundName = `CUSTOM:${soundName}`;
 
       breakdown.push({ javaLine: stmt, mcreatorBlock: 'play_sound', explanation: `Play sound '${soundName}'` });
@@ -3296,7 +3121,6 @@ function parseJavaStatementInternal(
     }
   }
 
-  // 14.5 ENTITY ADD EXHAUSTION: entity.causeFoodExhaustion(amount)
   if (stmt.includes('causeFoodExhaustion(')) {
     const amtMatch = stmt.match(/causeFoodExhaustion\(([^)]+)\)/);
     const amt = amtMatch ? amtMatch[1].trim() : '-1';
@@ -3318,7 +3142,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 14.6 ENTITY ADD EXPERIENCE / XP
   if (stmt.includes('giveExperiencePoints(') || stmt.includes('giveExperienceLevels(')) {
     const isLevel = stmt.includes('giveExperienceLevels(');
     const amtMatch = stmt.match(/(?:giveExperiencePoints|giveExperienceLevels)\(([^)]+)\)/);
@@ -3343,7 +3166,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 14.7 ENTITY SWING HAND
   if (stmt.includes('.swing(')) {
     const isOffhand = stmt.includes('OFF_HAND');
     const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)./);
@@ -3365,7 +3187,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 14.8 ENTITY SET DELTA MOVEMENT / VELOCITY
   if (stmt.includes('.setDeltaMovement(')) {
     const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)./);
     const target = targetMatch ? targetMatch[1] : 'entity';
@@ -3406,7 +3227,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 14.9 ENTITY SET FOOD LEVEL
   if (stmt.includes('.setFoodLevel(')) {
     const amtMatch = stmt.match(/setFoodLevel\(([^)]+)\)/);
     const amt = amtMatch ? amtMatch[1].trim() : '20';
@@ -3428,7 +3248,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 15. HEAL / SET HEALTH
   if (stmt.includes('.heal(') || stmt.includes('.setHealth(')) {
     const amtMatch = stmt.match(/(?:heal|setHealth)\(([^)]+)\)/);
     const amtExpr = amtMatch ? amtMatch[1].trim() : '1';
@@ -3446,7 +3265,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 16. ADD POTION / EFFECT
   if (stmt.includes('.addEffect(') || stmt.includes('MobEffectInstance')) {
     const potMatch = stmt.match(/MobEffectInstance\(([^,]+),([^,]+),?([^)]*)\)/);
     const potType = potMatch ? potMatch[1].trim() : 'MobEffects.REGENERATION';
@@ -3469,7 +3287,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 17. SET DELTA MOVEMENT / VELOCITY
   if (stmt.includes('.setDeltaMovement(')) {
     const vecMatch = stmt.match(/setDeltaMovement\(([\s\S]+)\);?$/);
     const vecExpr = vecMatch ? vecMatch[1].trim() : 'new Vec3(0, 0, 0)';
@@ -3487,7 +3304,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 17.1 ENTITY COBWEB (entity.makeStuckInBlock)
   if (stmt.includes('makeStuckInBlock(')) {
     const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)\./);
     const target = targetMatch ? targetMatch[1] : 'entity';
@@ -3505,7 +3321,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 17.2 ENTITY CLEAR ALL POTIONS (entity.removeAllEffects)
   if (stmt.includes('removeAllEffects(')) {
     const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)\./);
     const target = targetMatch ? targetMatch[1] : 'entity';
@@ -3523,7 +3338,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 17.3 ENTITY REMOVE SPECIFIC POTION EFFECT (entity.removeEffect)
   if (stmt.includes('.removeEffect(')) {
     const potMatch = stmt.match(/removeEffect\s*\(([^)]+)\)/);
     const potType = potMatch ? potMatch[1].trim() : 'MobEffects.REGENERATION';
@@ -3546,7 +3360,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 17.4 ENTITY RIDING: startRiding & stopRiding
   if (stmt.includes('.startRiding(')) {
     const rideMatch = stmt.match(/^([a-zA-Z0-9_]+)\.startRiding\s*\(([^,)]+)/);
     const passenger = rideMatch ? rideMatch[1].trim() : 'sourceentity';
@@ -3585,7 +3398,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 17.5 ENTITY PUSH (entity.push(dx, dy, dz))
   if (stmt.includes('.push(') && !stmt.includes('.pushPath(')) {
     const pushMatch = stmt.match(/^([a-zA-Z0-9_]+)\.push\s*\(([^,]+),([^,]+),([^)]+)\)/);
     const target = pushMatch ? pushMatch[1].trim() : 'entity';
@@ -3610,7 +3422,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 17.6 ENTITY TAME (entity.tame(player))
   if (stmt.includes('.tame(')) {
     const tameMatch = stmt.match(/^([a-zA-Z0-9_]+)\.tame\s*\(([^)]+)\)/);
     const target = tameMatch ? tameMatch[1].trim() : 'entity';
@@ -3631,7 +3442,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 17.7 OVERRIDE FALL DISTANCE
   if (stmt.includes('fallDistance =') || stmt.includes('.setFallDistance(') || stmt.includes('resetFallDistance(')) {
     const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)\./);
     const target = targetMatch ? targetMatch[1] : 'entity';
@@ -3653,7 +3463,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 17.8 PATHFINDING & NAVIGATION (moveTo, stop navigation, rotate to face)
   if (stmt.includes('.moveTo(') && (stmt.includes('getNavigation()') || stmt.includes('navigation'))) {
     const navMatch = stmt.match(/moveTo\s*\(([^,]+),([^,]+),([^,]+),([^)]+)\)/);
     const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)\./);
@@ -3724,7 +3533,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 17.9 BLOCK SCHEDULE TICK (level.scheduleTick(pos, block, ticks))
   if (stmt.includes('scheduleTick(')) {
     const tickMatch = stmt.match(/scheduleTick\s*\([^,]+,\s*[^,]+,\s*([^)]+)\)/);
     const ticks = tickMatch ? tickMatch[1].trim() : '0';
@@ -3746,8 +3554,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 18. ITEM PROCEDURES & STACK MANIPULATIONS
-  // 18.1 ITEM SHRINK
   if (stmt.includes('.shrink(')) {
     const amtMatch = stmt.match(/shrink\(([^)]+)\)/);
     const amt = amtMatch ? amtMatch[1].trim() : '1';
@@ -3765,7 +3571,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 18.2 ITEM GROW
   if (stmt.includes('.grow(')) {
     const amtMatch = stmt.match(/grow\(([^)]+)\)/);
     const amt = amtMatch ? amtMatch[1].trim() : '1';
@@ -3783,7 +3588,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 18.3 ITEM SET COUNT
   if (stmt.includes('.setCount(') && !stmt.includes('_setstack')) {
     const amtMatch = stmt.match(/setCount\(([^)]+)\)/);
     const amt = amtMatch ? amtMatch[1].trim() : '1';
@@ -3803,7 +3607,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 18.4 ITEM SET DAMAGE / DAMAGE ITEM
   if (stmt.includes('.setDamageValue(') || stmt.includes('.setDamage(')) {
     const dmgMatch = stmt.match(/(?:setDamageValue|setDamage)\(([^)]+)\)/);
     const dmg = dmgMatch ? dmgMatch[1].trim() : '1';
@@ -3842,7 +3645,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 18.5 ITEM SET DISPLAY NAME / RESET NAME
   if (stmt.includes('.setHoverName(')) {
     const nameMatch = stmt.match(/setHoverName\(([^)]+)\)/);
     const nameExpr = nameMatch ? nameMatch[1].trim() : 'Component.literal("Name")';
@@ -3878,7 +3680,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 18.6 ITEM ENCHANT / ADD ENHANCEMENT
   if (stmt.includes('.enchant(')) {
     const enchMatch = stmt.match(/enchant\(([^,]+),([^)]+)\)/);
     const ench = enchMatch ? enchMatch[1].trim() : 'Enchantments.SHARPNESS';
@@ -3900,7 +3701,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 18.7 ENTITY SET HAND / ARMOR ITEM
   if (stmt.includes('.setItemInHand(') || stmt.includes('.setItemSlot(')) {
     const isMain = stmt.includes('MAIN_HAND');
     const isOff = stmt.includes('OFF_HAND');
@@ -3922,7 +3722,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 18.8 ENTITY ADD ITEM TO INVENTORY
   if (stmt.includes('.addItem(') || (stmt.includes('getInventory().add(') && !stmt.includes('getCooldowns'))) {
     const itemMatch = stmt.match(/(?:addItem|getInventory\(\)\.add)\(([\s\S]+?)\);?$/);
     const itemExpr = itemMatch ? itemMatch[1].trim() : 'ItemStack.EMPTY';
@@ -3940,7 +3739,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 18.9 ITEM COOLDOWN SET
   if (stmt.includes('getCooldowns().addCooldown(')) {
     const cdMatch = stmt.match(/addCooldown\(([^,]+),([^)]+)\)/);
     const itemExpr = cdMatch ? cdMatch[1].trim() : 'itemstack.getItem()';
@@ -3960,7 +3758,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 19. SEND CHAT / SYSTEM MESSAGE
   if (stmt.includes('displayClientMessage') || stmt.includes('sendSystemMessage') || stmt.includes('sendSuccess')) {
     let msgExpr = '"Message"';
     let isActbar = 'FALSE';
@@ -4013,7 +3810,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 20. CANCEL EVENT & EVENT RESULTS
   if (stmt.includes('setCanceled(true)') || stmt.includes('cancel()')) {
     breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `cancel_${idSeq}`, mcreatorBlock: 'cancel_event', explanation: 'Cancel cancellable event' });
     return {
@@ -4037,7 +3833,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 20.1 DIRECTION LOOPS: for (Direction directioniterator : Direction.values())
   if (stmt.includes('Direction.values()') || stmt.includes('Direction.Plane.HORIZONTAL')) {
     const isHorizontal = stmt.includes('HORIZONTAL');
     const body = extractBlockBody(stmt);
@@ -4060,7 +3855,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 20.2 COMMAND ENTITY ITERATOR: for (Entity entityiterator : EntityArgument.getEntities(arguments, "name"))
   if (stmt.includes('EntityArgument.getEntities(') || (stmt.includes('getEntities(') && stmt.includes('arguments'))) {
     const nameMatch = stmt.match(/getEntities\s*\([^,]+,\s*"([^"]+)"\)/);
     const paramName = nameMatch ? nameMatch[1] : 'name';
@@ -4081,7 +3875,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 20.3 PROJECTILE SHOOT STATEMENTS
   if (stmt.includes('.shootFromRotation(') || stmt.includes('Projectiles.shoot(') || (stmt.includes('.shoot(') && !stmt.includes('sound'))) {
     const hasPos = stmt.includes('.setPos(') || stmt.includes('shootFromPos');
     const blockType = hasPos ? 'projectile_shoot_from_pos' : 'projectile_shoot_from_entity';
@@ -4102,7 +3895,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 20.4 SLOT & GUI STATEMENTS
   if (stmt.includes('gui_clear_slot') || (stmt.includes('.getSlot(') && stmt.includes('ItemStack.EMPTY'))) {
     const slotMatch = stmt.match(/getSlot\s*\(\s*([0-9]+)\s*\)/);
     const slotNum = slotMatch ? slotMatch[1] : '0';
@@ -4229,7 +4021,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 20.45 DEBUG MARKER & COMMENTS
   if (stmt.includes('Debug marker:') || stmt.includes('debugMarker(') || stmt.startsWith('// MCreator: marker')) {
     const markerMatch = stmt.match(/marker[0-9A-Za-z_]*/i) || stmt.match(/"([^"]+)"/);
     const markerName = markerMatch ? markerMatch[1] || markerMatch[0] : 'marker1';
@@ -4244,7 +4035,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 20.5 CALL PROCEDURE: e.g. SomeProcedure.execute(world, x, y, z, entity);
   const callProcMatch = stmt.match(/^([A-Za-z0-9_]+)\.execute\s*\(([\s\S]*)\)\s*;?$/);
   if (callProcMatch && !stmt.startsWith('this.') && !stmt.startsWith('super.')) {
     const rawProcClass = callProcMatch[1];
@@ -4284,7 +4074,6 @@ function parseJavaStatementInternal(
     };
   }
 
-  // 21. FALLBACK CUSTOM CODE SNIPPET (Statement snippet with top notch and bottom tab)
   breakdown.push({
     javaLine: stmt,
     lineNumber: startLine,
@@ -4301,9 +4090,6 @@ function parseJavaStatementInternal(
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/*                       Compound Control Structures                          */
-/* -------------------------------------------------------------------------- */
 
 function parseIfBranches(stmt: string): { branches: { cond: string; body: string }[]; elseBody: string | null } {
   const branches: { cond: string; body: string }[] = [];
@@ -4402,7 +4188,6 @@ function parseIfStatement(
 ): BlockASTNode {
   const { branches, elseBody } = parseIfBranches(stmt);
 
-  // Check if this specific leaf if statement is custom unmapped NeoForge event handling / target setting:
   if (
     branches.length === 1 &&
     elseBody === null &&
@@ -4438,7 +4223,6 @@ function parseIfStatement(
     if (startLine !== undefined) condAST.sourceLine = startLine;
     ifValues.push({ name: `IF${idx}`, block: condAST });
 
-    // Calculate line offset for branch body
     let bodyLine = startLine !== undefined ? startLine : undefined;
     if (startLine !== undefined && branch.body) {
       const branchBodyIdx = stmt.indexOf(branch.body);
@@ -4531,7 +4315,6 @@ function parseForLoopStatement(
     .map((s, idx) => parseJavaStatement(s.text, idSeq * 100 + idx, variables, breakdown, elementType, s.startLine, s.endLine))
     .filter((n): n is BlockASTNode => n !== null);
 
-  // Check if standard indexed for: for (int i = 0; i < N; i++)
   if (header.includes(';')) {
     const parts = header.split(';').map(p => p.trim());
     const initPart = parts[0] || 'int i = 0';
@@ -4573,7 +4356,6 @@ function parseForLoopStatement(
     };
   }
 
-  // Enhanced for-each loop: for (Entity e : list)
   if (header.includes(':')) {
     const parts = header.split(':').map(p => p.trim());
     const varMatch = parts[0].match(/([a-zA-Z0-9_]+)\s*$/);
@@ -4594,7 +4376,6 @@ function parseForLoopStatement(
     };
   }
 
-  // Generic repeat fallback
   return {
     id: `repeat_${idSeq}`,
     type: 'controls_repeat_ext',
@@ -4653,7 +4434,6 @@ function parseAIGoalStatement(
   idSeq: number,
   breakdown: { javaLine: string; mcreatorBlock: string; explanation: string }[]
 ): BlockASTNode {
-  // 1. Avoid Entity Goal
   if (stmt.includes('AvoidEntityGoal')) {
     const entityMatch = stmt.match(/([A-Z][A-Za-z0-9_]*Entity)\.class/);
     const entityType = entityMatch ? entityMatch[1].replace('Entity', '') : 'Player';
@@ -4677,7 +4457,6 @@ function parseAIGoalStatement(
     };
   }
 
-  // 2. Nearest Attackable Target Goal
   if (stmt.includes('NearestAttackableTargetGoal') || stmt.includes('TargetGoal')) {
     const entityMatch = stmt.match(/([A-Z][A-Za-z0-9_]*)\.class/);
     const entityType = entityMatch ? entityMatch[1] : 'Player';
@@ -4691,7 +4470,6 @@ function parseAIGoalStatement(
     };
   }
 
-  // 3. Melee Attack Goal
   if (stmt.includes('MeleeAttackGoal')) {
     const spdMatch = stmt.match(/([0-9]+\.[0-9]+)/);
     const speed = spdMatch ? spdMatch[1] : '1.2';
@@ -4706,7 +4484,6 @@ function parseAIGoalStatement(
     };
   }
 
-  // 4. Open Door Goal
   if (stmt.includes('OpenDoorGoal')) {
     breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_open_doors', explanation: 'Open doors AI goal' });
     return {
@@ -4718,7 +4495,6 @@ function parseAIGoalStatement(
     };
   }
 
-  // 5. Break Door Goal
   if (stmt.includes('BreakDoorGoal')) {
     breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_doors_break', explanation: 'Break doors AI goal' });
     return {
@@ -4729,7 +4505,6 @@ function parseAIGoalStatement(
     };
   }
 
-  // 6. Float Goal / Swim
   if (stmt.includes('FloatGoal')) {
     breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_swim', explanation: 'Float in water goal' });
     return {
@@ -4740,7 +4515,6 @@ function parseAIGoalStatement(
     };
   }
 
-  // 7. Water Avoiding Random Stroll
   if (stmt.includes('WaterAvoidingRandomStrollGoal')) {
     breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_wander_avoid_water', explanation: 'Wander avoiding water AI goal' });
     return {
@@ -4752,7 +4526,6 @@ function parseAIGoalStatement(
     };
   }
 
-  // 8. Random Stroll
   if (stmt.includes('RandomStrollGoal')) {
     breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_wander', explanation: 'Wander around AI goal' });
     return {
@@ -4764,7 +4537,6 @@ function parseAIGoalStatement(
     };
   }
 
-  // 9. Look At Player
   if (stmt.includes('LookAtPlayerGoal')) {
     breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_look_at', explanation: 'Look at player AI goal' });
     return {
@@ -4777,7 +4549,6 @@ function parseAIGoalStatement(
     };
   }
 
-  // 10. Random Look Around
   if (stmt.includes('RandomLookAroundGoal')) {
     breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_look_around', explanation: 'Look around randomly AI goal' });
     return {
@@ -4788,7 +4559,6 @@ function parseAIGoalStatement(
     };
   }
 
-  // 11. Hurt By Target
   if (stmt.includes('HurtByTargetGoal')) {
     breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_target_hurt_by', explanation: 'Fight attacker mobs back goal' });
     return {
@@ -4800,7 +4570,6 @@ function parseAIGoalStatement(
     };
   }
 
-  // 12. Leap At Target
   if (stmt.includes('LeapAtTargetGoal')) {
     breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_leap_at_target', explanation: 'Leap at target goal' });
     return {
@@ -4812,7 +4581,6 @@ function parseAIGoalStatement(
     };
   }
 
-  // 13. Breed
   if (stmt.includes('BreedGoal')) {
     breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_breed', explanation: 'Breed, find partner goal' });
     return {
@@ -4824,7 +4592,6 @@ function parseAIGoalStatement(
     };
   }
 
-  // 14. Follow Owner
   if (stmt.includes('FollowOwnerGoal')) {
     breakdown.push({ javaLine: stmt, mcreatorBlock: 'aitask_follow_owner', explanation: 'Follow owner goal' });
     return {
@@ -4840,7 +4607,6 @@ function parseAIGoalStatement(
     };
   }
 
-  // Fallback AI snippet
   breakdown.push({ javaLine: stmt, mcreatorBlock: 'custom_code_snippet', explanation: 'Preserved AI goal definition' });
   return {
     id: `ai_custom_${idSeq}`,
@@ -4954,12 +4720,9 @@ function parseReturnStatement(
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/*                     Recursive Expression Parser to AST                     */
-/* -------------------------------------------------------------------------- */
 
 export function parseExpressionToAST(rawExpr: string, seq: number, depth: number = 0): BlockASTNode {
-  if (depth > 40 || !rawExpr || !rawExpr.trim()) {
+  if (depth > 25 || !rawExpr || !rawExpr.trim()) {
     return {
       id: `snip_expr_${seq}`,
       type: 'custom_code_snippet',
@@ -4969,14 +4732,14 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
       isSnippetValue: true,
     };
   }
-  rawExpr = unwrapMCreatorBoilerplate(rawExpr);
+  if (depth === 0) {
+    rawExpr = unwrapMCreatorBoilerplate(rawExpr);
+  }
   let expr = rawExpr.trim();
   if (expr.endsWith(";")) expr = expr.slice(0, -1).trim();
 
-  // Normalize newlines in boolean expressions to spaces before binary splitting
   expr = expr.replace(/\s*\n\s*/g, " ");
 
-  // Strip redundant outer parentheses before splitting top-level operators
   while (expr.startsWith("(") && expr.endsWith(")")) {
     let depth = 0;
     let enclosed = true;
@@ -4994,7 +4757,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     }
   }
 
-  // 0.00 INFINITY AND MAX NUMBERS
   if (/^\(?\s*(?:\(int\)|int\s*\))?\s*(?:Double\.POSITIVE_INFINITY|Float\.POSITIVE_INFINITY|Integer\.MAX_VALUE)\s*\)?$/i.test(expr)) {
     return {
       id: `math_num_${seq}`,
@@ -5005,8 +4767,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 0.01 COMMAND PARAMETERS
-  // 1. Number argument: DoubleArgumentType, FloatArgumentType, IntegerArgumentType, LongArgumentType, commandParameterNumber
   const cmdNumMatch = expr.match(/(?:Double|Float|Integer|Long)ArgumentType\.get(?:Double|Float|Integer|Long)\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)|commandParameterNumber\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)/);
   if (cmdNumMatch) {
     const paramVal = cmdNumMatch[1] || cmdNumMatch[2];
@@ -5019,7 +4779,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 2. Logic (boolean) argument: BoolArgumentType.getBool, commandParameterLogic
   const cmdBoolMatch = expr.match(/BoolArgumentType\.getBool\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)|commandParameterLogic\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)/);
   if (cmdBoolMatch) {
     const paramVal = cmdBoolMatch[1] || cmdBoolMatch[2];
@@ -5032,7 +4791,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 3. String / Text / Message argument: StringArgumentType.getString, MessageArgument.getMessage, commandParameterString, commandParameterMessage
   const cmdStrMatch = expr.match(/(?:StringArgumentType\.getString|MessageArgument\.getMessage|commandParameterString|commandParameterMessage)\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)/);
   if (cmdStrMatch) {
     const paramVal = cmdStrMatch[1];
@@ -5045,7 +4803,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 4. Entity argument: EntityArgument.getEntity, commandParameterEntity
   const cmdEntMatch = expr.match(/(?:EntityArgument\.getEntity|commandParameterEntity)\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)/);
   if (cmdEntMatch) {
     const paramVal = cmdEntMatch[1];
@@ -5058,7 +4815,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 5. BlockPos x, y, z components: commandParameterBlockPos(arguments, "NAME").getX() / .getY() / .getZ()
   const cmdPosCompMatch = expr.match(/(?:commandParameterBlockPos|BlockPosArgument\.getLoadedBlockPos|BlockPosArgument\.getBlockPos)\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)\s*\.(getX|getY|getZ)\s*\(\s*\)/);
   if (cmdPosCompMatch) {
     const paramVal = cmdPosCompMatch[1];
@@ -5073,7 +4829,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 6. BlockPos argument: BlockPosArgument.getLoadedBlockPos, BlockPosArgument.getBlockPos, commandParameterBlockPos
   const cmdPosMatch = expr.match(/(?:BlockPosArgument\.(?:getLoadedBlockPos|getBlockPos)|commandParameterBlockPos)\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)/);
   if (cmdPosMatch) {
     const paramVal = cmdPosMatch[1];
@@ -5086,7 +4841,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 7. BlockState argument: BlockStateArgument.getBlock, commandParameterBlockState
   const cmdBsMatch = expr.match(/(?:BlockStateArgument\.getBlock|commandParameterBlockState)\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)/);
   if (cmdBsMatch) {
     const paramVal = cmdBsMatch[1];
@@ -5099,7 +4853,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 8. ItemStack / Item argument: ItemArgument.getItem, commandParameterItemStack
   const cmdItemMatch = expr.match(/(?:ItemArgument\.getItem|commandParameterItemStack)\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)/);
   if (cmdItemMatch) {
     const paramVal = cmdItemMatch[1];
@@ -5112,7 +4865,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 9. Resource Location / Identifier argument
   const cmdResMatch = expr.match(/(?:ResourceLocationArgument|IdentifierArgument)\.(?:getId|getResourceLocation)\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)|commandParameterResourceLocation\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)/);
   if (cmdResMatch) {
     const paramVal = cmdResMatch[1] || cmdResMatch[2];
@@ -5125,8 +4877,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 0.05 ITEM TAG CHECK (compare_mcitems_oredictionary)
-  // e.g. entity.getMainHandItem().is(ItemTags.create(ResourceLocation.parse("minecraft:axes")))
   if (!expr.includes(" || ") && !expr.includes(" && ") && expr.includes(".is(ItemTags.create(")) {
     const dotIs = expr.indexOf(".is(ItemTags.create(");
     const rawStack = expr.substring(0, dotIs).trim();
@@ -5152,7 +4902,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Split top-level || or && operators (depth = 0)
   const isOr = expr.includes(" || ");
   const isAnd = !isOr && expr.includes(" && ");
   if (isOr || isAnd) {
@@ -5184,12 +4933,10 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     }
   }
 
-  // Strip trailing semicolon if present
   if (expr.endsWith(';')) {
     expr = expr.slice(0, -1).trim();
   }
 
-  // Sanitize unmatched leading/trailing parens (e.g. "(-1" or "x))")
   let openCount = 0;
   let closeCount = 0;
   for (let i = 0; i < expr.length; i++) {
@@ -5205,7 +4952,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     closeCount--;
   }
 
-  // Strip redundant outer parentheses: ( ... )
   while (expr.startsWith('(') && expr.endsWith(')')) {
     if (isEnclosedInParens(expr)) {
       expr = expr.substring(1, expr.length - 1).trim();
@@ -5214,7 +4960,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     }
   }
 
-  // Logical negation: ! (expr) -> logic_negate (not)
   if (expr.startsWith('!')) {
     const unneg = expr.substring(1).trim();
     const innerAST = parseExpressionToAST(unneg, seq * 10 + 1);
@@ -5227,7 +4972,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Infinity constant mapping for potion duration sockets etc.
   if (expr.includes('Double.POSITIVE_INFINITY') || expr.includes('Double.MAX_VALUE')) {
     return {
       id: `num_inf_${seq}`,
@@ -5238,7 +4982,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Math.random() -> Random [0,1)
   if (expr === 'Math.random()' || expr === 'java.lang.Math.random()') {
     return {
       id: `rnd_${seq}`,
@@ -5249,7 +4992,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Mth.nextInt(...) -> math_random_int_between
   if (expr.includes('Mth.nextInt(')) {
     const fnArgs = extractFunctionArguments(expr, 'Mth.nextInt');
     let minArg = '1';
@@ -5273,7 +5015,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Mth.nextDouble(...) -> math_random_number_between
   if (expr.includes('Mth.nextDouble(')) {
     const fnArgs = extractFunctionArguments(expr, 'Mth.nextDouble');
     let minArg = '0';
@@ -5297,7 +5038,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Mth.clamp(...) or Math.clamp(...) -> math_clamp
   if (expr.includes('Mth.clamp(') || expr.includes('Math.clamp(')) {
     const fnArgs = extractFunctionArguments(expr, expr.includes('Mth.clamp(') ? 'Mth.clamp' : 'Math.clamp');
     if (fnArgs.length >= 3) {
@@ -5315,7 +5055,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     }
   }
 
-  // Mth.lerp(...) -> math_lerp
   if (expr.includes('Mth.lerp(')) {
     const fnArgs = extractFunctionArguments(expr, 'Mth.lerp');
     if (fnArgs.length >= 3) {
@@ -5333,7 +5072,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     }
   }
 
-  // Math constants: Math.PI, Math.E
   if (expr === 'Math.PI' || expr === 'java.lang.Math.PI') {
     return {
       id: `pi_${seq}`,
@@ -5353,7 +5091,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 0.05 ENTITY CREATIVE MODE CHECK: entity_iscreative
   if (expr.includes('instabuild') || (expr.includes('instanceof Player') && expr.includes('getAbilities()'))) {
     const isIterator = expr.includes('entityiterator') || expr.includes('_ent');
     return {
@@ -5372,7 +5109,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 0.04 PLAYER VARIABLES GETTER: entity.getData(TheBackwoodsModVariables.PLAYER_VARIABLES).variableName
   const playerVarGetMatch = expr.match(/([a-zA-Z0-9_]+)\.getData\([a-zA-Z0-9_.]*PLAYER_VARIABLES\)\.([a-zA-Z0-9_]+)/);
   if (playerVarGetMatch) {
     const rawTarget = playerVarGetMatch[1];
@@ -5391,7 +5127,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 0.045 ENTITY GAMEMODE CHECK: getEntityGameType(entity) == GameType.SPECTATOR / SURVIVAL / CREATIVE / ADVENTURE
   const gamemodeMatch = expr.match(/(?:getEntityGameType\(([^)]+)\)\s*==\s*GameType\.([A-Z]+)|(?:entity|player)\.gameMode\.getGameModeForPlayer\(\)\s*==\s*GameType\.([A-Z]+))/);
   if (gamemodeMatch) {
     const rawTarget = gamemodeMatch[1] || 'entity';
@@ -5410,7 +5145,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 0.046 ENTITY HAS ITEM IN INVENTORY: hasEntityInInventory(entity, itemstack)
   if (expr.includes('hasEntityInInventory(')) {
     const match = expr.match(/hasEntityInInventory\(([^,]+),\s*([\s\S]+?)\)/);
     const rawTarget = match ? match[1].trim() : 'entity';
@@ -5447,7 +5181,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Check if expression is complex custom ServerLevel or internal engine code that has no MCreator native block:
   if (expr.includes('instanceof net.minecraft.server.level.ServerLevel') || expr.includes('ServerLevel _slv') || expr.includes('_slv.getServer()') || expr.includes('.getTickCount()')) {
     return {
       id: `snip_expr_${seq}`,
@@ -5459,7 +5192,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Cast unwrapping: (float) expr, (int) expr, (double) expr
   const castMatch = expr.match(/^\((?:float|double|int|long)\)\s*([\s\S]+)$/);
   if (castMatch) {
     const uncast = castMatch[1].trim();
@@ -5478,10 +5210,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
 
 
 
-  // 0.1 ENTITY TAG CHECK: entity_is_tagged_in
-  // e.g. entity.getType().is(TagKey.create(Registries.ENTITY_TYPE, ResourceLocation.parse("the_backwoods:woodbound_entities")))
-  // e.g. entityiterator.getType().is(TagKey.create(Registries.ENTITY_TYPE, ...))
-  // e.g. entity.is(TagKey.create(Registries.ENTITY_TYPE, ...))
   const entityTagMatch = expr.match(
     /^([a-zA-Z0-9_]+)(?:\.getType\(\))?\.is\(\s*TagKey\.create\(\s*Registries\.ENTITY_TYPE\s*,\s*(?:ResourceLocation\.parse|ResourceLocation\.fromNamespaceAndPath|ResourceLocation\.tryParse)?\(?\s*([^)]+)\)?\s*\)\s*\)$/
   );
@@ -5504,8 +5232,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 0.17 DAMAGE SOURCE IS TAGGED IN (damagesource_is_tagged_in)
-  // e.g. damagesource.is(DamageTypeTags.IS_FIRE)  or  damagesource.is(TagKey.create(Registries.DAMAGE_TYPE, ...))
   if (expr.includes("DamageTypeTags.") || (expr.includes("Registries.DAMAGE_TYPE") && expr.includes(".is("))) {
     const tagMatch = expr.match(/DamageTypeTags\.([A-Za-z0-9_]+)/) || expr.match(/ResourceLocation\.(?:parse|fromNamespaceAndPath)?\(?["\x27]([^"\x27]+)["\x27]\)?/);
     const tagArg = tagMatch ? (tagMatch[1] || tagMatch[2]).toLowerCase() : "minecraft:is_fire";
@@ -5523,7 +5249,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 0.18 ITEMSTACK IS DAMAGEABLE (itemstack_is_damageable)
   if (expr.includes(".isDamageableItem()") || expr.includes(".isDamageable(")) {
     const itemMatch = expr.match(/^([a-zA-Z0-9_.]+)\.isDamageable/);
     const rawItem = itemMatch ? itemMatch[1] : "itemstack";
@@ -5536,7 +5261,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 0.19 ITEMSTACK IS DAMAGED (itemstack_is_damaged)
   if (expr.includes(".isDamaged()")) {
     const itemMatch = expr.match(/^([a-zA-Z0-9_.]+)\.isDamaged/);
     const rawItem = itemMatch ? itemMatch[1] : "itemstack";
@@ -5549,7 +5273,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 0.04 FALL DISTANCE CHECK (entity_get_fall)
   if (expr.includes(".fallDistance") || expr === "entity.fallDistance") {
     const entMatch = expr.match(/^([a-zA-Z0-9_.]+)\.fallDistance/);
     const rawEnt = entMatch ? entMatch[1] : "entity";
@@ -5562,8 +5285,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 0.2 WORLD DIFFICULTY CHECK: world_data_checkdifficulty
-  // e.g. world.getDifficulty() == Difficulty.HARD
   const diffMatch = expr.match(/(?:world|level)\.getDifficulty\(\)\s*==\s*Difficulty\.([A-Z_]+)/) ||
                     expr.match(/Difficulty\.([A-Z_]+)\s*==\s*(?:world|level)\.getDifficulty\(\)/) ||
                     expr.match(/Difficulty\.([A-Z_]+)\.equals\(\s*(?:world|level)\.getDifficulty\(\)\s*\)/);
@@ -5579,10 +5300,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
   }
 
 
-  // 1. ENTITY DATA PARAMETER ACCESSORS (SYNCED DATA)
-  // NeoForge 1.21.1 / 26.1.2:
-  // (entity instanceof LignumPalusEntity _datEntI ? _datEntI.getEntityData().get(LignumPalusEntity.DATA_mouth_state) : 0)
-  // (entity instanceof LignumPalusEntity _datEntL && _datEntL.getEntityData().get(LignumPalusEntity.DATA_mouth_state))
   const dataParamTernaryMatch = expr.match(
     /\(?\s*([a-zA-Z0-9_]+)\s+instanceof\s+([a-zA-Z0-9_]+)\s+([a-zA-Z0-9_]+)\s*\?\s*\3\.getEntityData\(\)\.get\(\s*\2\.DATA_([a-zA-Z0-9_]+)\s*\)\s*:\s*([^)]+)\)?/
   );
@@ -5611,7 +5328,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Logic data parameter: (entity instanceof LignumPalusEntity _datEntL && _datEntL.getEntityData().get(LignumPalusEntity.DATA_xxx))
   const dataParamLogicMatch = expr.match(
     /\(?\s*([a-zA-Z0-9_]+)\s+instanceof\s+([a-zA-Z0-9_]+)\s+([a-zA-Z0-9_]+)\s*&&\s*\3\.getEntityData\(\)\.get\(\s*\2\.DATA_([a-zA-Z0-9_]+)\s*\)\)?/
   );
@@ -5636,7 +5352,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Standalone getEntityData().get(...)
   const directDataParamMatch = expr.match(
     /([a-zA-Z0-9_]+)\.getEntityData\(\)\.get\(\s*([a-zA-Z0-9_]+)\.DATA_([a-zA-Z0-9_]+)\s*\)/
   );
@@ -5661,7 +5376,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 2. TEXT COMPARISON: a.equals(b) -> text_binary_ops (Blockly block: %1 = %2 with inputs A and B)
   const equalsMatch = expr.match(/^([\s\S]+?)\.equals\(([\s\S]+)\)$/);
   if (equalsMatch && !expr.includes('&&') && !expr.includes('||')) {
     const leftStr = equalsMatch[1].trim();
@@ -5679,7 +5393,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Ternary: cond ? then : else
   const ternaryIdx = findTopLevelOperator(expr, '?');
   if (ternaryIdx !== -1) {
     const colonIdx = findTopLevelOperator(expr.substring(ternaryIdx + 1), ':');
@@ -5702,7 +5415,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     }
   }
 
-  // Logical OR (||)
   const orIdx = findTopLevelBinaryOp(expr, '||');
   if (orIdx !== -1) {
     const left = expr.substring(0, orIdx).trim();
@@ -5720,7 +5432,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Logical AND (&&)
   const andIdx = findTopLevelBinaryOp(expr, '&&');
   if (andIdx !== -1) {
     const left = expr.substring(0, andIdx).trim();
@@ -5738,14 +5449,12 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Comparisons: ==, !=, <=, >=, <, >
   const compMatch = findComparisonOperator(expr);
   if (compMatch) {
     const { op, index, length } = compMatch;
     const left = expr.substring(0, index).trim();
     const right = expr.substring(index + length).trim();
 
-    // Check if item comparison e.g. itemstackiterator.getItem() == Blocks.OBSIDIAN.asItem()
     if (
       (left.includes('.getItem()') || left.includes('itemstack') || left.includes('ItemStack')) &&
       (right.includes('.getItem()') || right.includes('Blocks.') || right.includes('Items.') || right.includes('ModBlocks') || right.includes('ModItems') || right.includes('asItem()'))
@@ -5764,7 +5473,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
       };
     }
 
-    // Dimension comparison: entity.level().dimension() == SomeDimension → compare_dimensionids
     const dimLhs = left.match(/(?:entity|player|living)\.level\(\)\.dimension\(\)/);
     const dimRhs = right.match(/(?:entity|player|living)\.level\(\)\.dimension\(\)/);
     if (dimLhs || dimRhs || left.includes('.dimension()') || right.includes('.dimension()')) {
@@ -5822,14 +5530,12 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Binary Arithmetic Addition & Subtraction (+, -)
   const addSubIdx = findLowestPrecedenceArithmeticOp(expr, ['+', '-']);
   if (addSubIdx !== -1) {
     const op = expr[addSubIdx];
     const left = expr.substring(0, addSubIdx).trim();
     const right = expr.substring(addSubIdx + 1).trim();
 
-    // Check if string concatenation: "..." + expr
     if (left.startsWith('"') || right.startsWith('"') || expr.includes('""')) {
       return {
         id: `join_${seq}`,
@@ -5856,7 +5562,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Binary Arithmetic Multiplication & Division & Modulo (*, /, %)
   const mulDivIdx = findLowestPrecedenceArithmeticOp(expr, ['*', '/', '%']);
   if (mulDivIdx !== -1) {
     const op = expr[mulDivIdx];
@@ -5890,7 +5595,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // World Data Height At: world.getHeight(...) or world.getHeightmapPos(...)
   if (expr.includes('getHeight') || expr.includes('getHeightmapPos')) {
     const typeMatch = expr.match(/Heightmap\.Types\.([A-Z_]+)/);
     const rawType = typeMatch ? typeMatch[1] : 'WORLD_SURFACE';
@@ -5919,7 +5623,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Potion Effect Remaining Ticks: entity_potioneffectremaining
   if (expr.includes('.getEffect(') && expr.includes('.getDuration()')) {
     const potMatch = expr.match(/getEffect\s*\(\s*(?:MobEffects\.)?([a-zA-Z0-9_]+)\s*\)/);
     const potName = potMatch ? potMatch[1] : 'DARKNESS';
@@ -5939,7 +5642,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Potion Effect Level / Amplifier: entity_potioneffectlevel
   if (expr.includes('.getEffect(') && expr.includes('.getAmplifier()')) {
     const potMatch = expr.match(/getEffect\s*\(\s*(?:MobEffects\.)?([a-zA-Z0-9_]+)\s*\)/);
     const potName = potMatch ? potMatch[1] : 'DARKNESS';
@@ -5959,11 +5661,9 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Has Potion Effect: entity_haspotioneffect
   if (expr.includes('.hasEffect(')) {
     const potMatch = expr.match(/hasEffect\s*\(\s*(?:[a-zA-Z0-9_]+\.)?([a-zA-Z0-9_]+)\s*\)/);
     let potName = potMatch ? potMatch[1] : 'DARKNESS';
-    // Format custom PascalCase effect names (e.g. INOCULATION_EFFECT -> InoculationEffect)
     if (potName.includes('_') || /^[A-Z0-9_]+$/.test(potName)) {
       potName = potName.split('_').map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join('');
     }
@@ -5983,7 +5683,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Get Potion as Item: item_get_potion
   if (expr.includes('PotionContents.createItemStack') || (expr.includes('Items.POTION') || expr.includes('Items.SPLASH_POTION') || expr.includes('Items.LINGERING_POTION'))) {
     let potType = 'POTION';
     if (expr.includes('SPLASH_POTION')) potType = 'SPLASH_POTION';
@@ -6001,7 +5700,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Potion Projectile: projectiles_potion
   if (expr.includes('createPotionProjectile')) {
     let potType = 'SPLASH_POTION';
     if (expr.includes('LINGERING_POTION')) potType = 'LINGERING_POTION';
@@ -6034,7 +5732,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // World game time in ticks (world_data_current_time)
   if (expr.includes('.getLevelData().getGameTime()') || expr.includes('.getGameTime()') || expr.includes('.getDayTime()') || expr.includes('dayTime()')) {
     return {
       id: `world_time_${seq}`,
@@ -6044,7 +5741,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Damage Source from type: new DamageSource(world.holderOrThrow(DamageTypes.THORNS)) -> damagesource_from_type
   if (expr.includes('DamageSource') || expr.includes('DamageTypes.') || expr.includes('holderOrThrow')) {
     const typeMatch = expr.match(/(?:DamageTypes\.|ResourceLocation\.parse\(["'](?:minecraft:)?)([a-zA-Z0-9_]+)["']?\)?/);
     const rawType = typeMatch ? typeMatch[1] : 'GENERIC';
@@ -6060,7 +5756,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Waterloggable block: block_is_waterloggable
   if (expr.includes('instanceof SimpleWaterloggedBlock')) {
     const blockMatch = expr.match(/^([^\s]+)\s+instanceof\s+SimpleWaterloggedBlock/);
     const blockExpr = blockMatch ? blockMatch[1].trim() : 'block';
@@ -6073,7 +5768,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Entity in water / underwater / bubble column checks
   if (expr.includes('.isInWaterRainOrBubble()')) {
     const entMatch = expr.match(/^([a-zA-Z0-9_.]+)\.isInWaterRainOrBubble\(\)/);
     const rawEnt = entMatch ? entMatch[1].trim() : 'entity';
@@ -6134,7 +5828,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Entity set on fire: entity_set_on_fire
   if (expr.includes('.setTicks(1') || expr.includes('.setSeconds(') || expr.includes('.setFire(')) {
     const secMatch = expr.match(/(?:setSeconds|setTicks|setFire)\s*\(\s*([^)]+)\s*\)/);
     const secExpr = secMatch ? secMatch[1].trim() : '15';
@@ -6155,7 +5848,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Entity remaining fire ticks: entity_get_fire_ticks
   if (expr.includes('.getRemainingFireTicks()') || expr.includes('.getFireTicks()')) {
     const entMatch = expr.match(/^([a-zA-Z0-9_.]+)\./);
     const rawEnt = entMatch ? entMatch[1].trim() : 'entity';
@@ -6171,7 +5863,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Entity fire immunity: entity_isimmunetofire
   if (expr.includes('.fireImmune()') || expr.includes('.isFireImmune()')) {
     const entMatch = expr.match(/^([a-zA-Z0-9_.]+)\./);
     const rawEnt = entMatch ? entMatch[1].trim() : 'entity';
@@ -6187,7 +5878,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Team friendly fire: team_get_friendlyfire
   if (expr.includes('getAllowFriendlyFire()') || expr.includes('isAllowFriendlyFire()')) {
     const teamMatch = expr.match(/(?:getTeam\s*\([^)]+\)|getScoreboard\s*\([^)]+\)\.getPlayerTeam\s*\([^)]+\)|scoreboard\.getPlayerTeam\s*\([^)]+\)|getTeams\s*\([^)]+\)|Team\s+[^=]+=)\s*([^,]+)/);
     const teamExpr = teamMatch ? teamMatch[1].trim() : '"team_name"';
@@ -6200,7 +5890,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Null Entity Literal: (Entity) null, (LivingEntity) null, null_entity
   if (expr === 'null' || expr === '(Entity) null' || expr === '(LivingEntity) null' || expr === '(Player) null') {
     return {
       id: `null_ent_${seq}`,
@@ -6210,7 +5899,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Is Mod Loaded check: ModList.get().isLoaded(...) or FMLLoader.getLoadingModList().isLoaded(...)
   if (expr.includes('.isLoaded(') || expr.includes('is_mod_loaded')) {
     const modMatch = expr.match(/isLoaded\s*\(\s*["']?([^"')]+)["']?\s*\)/);
     const modId = modMatch ? modMatch[1].trim() : 'forge';
@@ -6225,7 +5913,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Procedure Return Value Call: SomeProcedure.execute(...)
   if (/[A-Z][a-zA-Z0-9_]*Procedure\.execute/.test(expr) || expr.includes('procedure_retval_')) {
     const procMatch = expr.match(/([A-Z][a-zA-Z0-9_]*Procedure)\.execute/);
     const procName = procMatch ? procMatch[1].replace(/Procedure$/, '') : 'CustomProcedure';
@@ -6238,7 +5925,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Text Functions: Substring, Contains, StartsWith, EndsWith, Trim, Upper/Lower
   if (expr.includes('.substring(')) {
     const subMatch = expr.match(/\.substring\s*\(([^,]+),([^)]+)\)/);
     const fromStr = subMatch ? subMatch[1].trim() : '0';
@@ -6353,7 +6039,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Date and Time expressions: Calendar.getInstance().get(...)
   if (expr.includes('Calendar.getInstance()')) {
     let timeType = 'time_seconds';
     let timeTitle = 'Seconds past current minute';
@@ -6373,7 +6058,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Unary NOT (!)
   if (expr.startsWith('!')) {
     const inner = expr.substring(1).trim();
     return {
@@ -6385,7 +6069,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Math.min(a, b)
   if (expr.startsWith('Math.min(')) {
     const args = extractFunctionArguments(expr, 'Math.min');
     if (args.length >= 2) {
@@ -6403,7 +6086,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     }
   }
 
-  // Math.max(a, b)
   if (expr.startsWith('Math.max(')) {
     const args = extractFunctionArguments(expr, 'Math.max');
     if (args.length >= 2) {
@@ -6421,7 +6103,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     }
   }
 
-  // Math unary functions: Math.sin, Math.cos, Math.tan, Math.asin, Math.acos, Math.atan, Math.abs, Math.sqrt, Math.cbrt, Math.floor, Math.ceil, Math.round, Math.log, Math.log10, Math.exp, Math.toDegrees, Math.toRadians
   const singleMathMatch = expr.match(/^Math\.(sin|cos|tan|asin|acos|atan|abs|sqrt|cbrt|floor|ceil|round|log|log10|exp|toDegrees|toRadians|signum)\(([\s\S]+)\)$/);
   if (singleMathMatch) {
     const fn = singleMathMatch[1];
@@ -6456,7 +6137,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Math.random()
   if (expr.includes('Math.random()')) {
     return {
       id: `rand_${seq}`,
@@ -6467,7 +6147,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // NBT GETTERS & TAG CHECKS: (Entity, Block, Item, and CompoundTag)
   if (expr.includes('.getInt(') || expr.includes('.getDouble(') || expr.includes('.getFloat(') || expr.includes('.getBoolean(') || expr.includes('.getString(') || expr.includes('.getCompound(') || expr.includes('.getList(') || (expr.includes('.contains(') && (expr.includes('Tag') || expr.includes('PersistentData') || expr.includes('CUSTOM_DATA') || expr.includes('tag.'))) || expr.includes('new CompoundTag()')) {
     if (expr.includes('new CompoundTag()')) {
       return {
@@ -6486,7 +6165,7 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     const isContains = expr.includes('.contains(');
 
     let keyExpr = '"key"';
-    let typeParam = '10'; // Compound type for list
+    let typeParam = '10';
     if (isContains) {
       const match = expr.match(/\.contains\(([\s\S]+)\)/);
       if (match) keyExpr = match[1].trim();
@@ -6648,7 +6327,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
       };
     }
 
-    // Default: Entity NBT
     const targetMatch = expr.match(/^([a-zA-Z0-9_]+)\./);
     const target = targetMatch ? targetMatch[1] : 'entity';
     const entityAST = parseExpressionToAST(target, seq * 10);
@@ -6690,7 +6368,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // INSTANCEOF SUBTYPE / TYPE COMPARISON: sourceentity instanceof Player, entity instanceof LivingEntity
   if (expr.includes('instanceof')) {
     const parts = expr.split('instanceof').map(p => p.trim());
     const entityExpr = parts[0];
@@ -6709,7 +6386,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // METHOD CHAIN: getBlockState(...)
   if (expr.includes('.getBlockState(')) {
     let xArg = 'x', yArg = 'y', zArg = 'z';
     const posMatch = expr.match(/BlockPos\.containing\s*\(([^,]+),\s*([^,]+),\s*([^)]+)\)/);
@@ -6720,7 +6396,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     } else {
       const pMatch = expr.match(/getBlockState\s*\(([^)]+)\)/);
       if (pMatch) {
-        // if passed a BlockPos variable or expression
         xArg = pMatch[1].trim() + '.getX()';
         yArg = pMatch[1].trim() + '.getY()';
         zArg = pMatch[1].trim() + '.getZ()';
@@ -6739,7 +6414,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // BLOCKSTATE CHECKS: state.isAir()
   if (expr.includes('.isAir()')) {
     return {
       id: `is_air_${seq}`,
@@ -6754,7 +6428,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // CLIENT SIDE CHECK
   if (expr.includes('isClientSide()') || expr.includes('isRemote')) {
     return {
       id: `is_client_${seq}`,
@@ -6765,7 +6438,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
   }
 
 
-  // WORLD ENTITY IN RANGE EXISTS: !world.getEntitiesOfClass(Class, new AABB(...).inflate(range / 2d), ...).isEmpty()
   if (expr.includes('.getEntitiesOfClass(') && expr.includes('.isEmpty()')) {
     const clsMatch = expr.match(/getEntitiesOfClass\(\s*([A-Za-z0-9_]+?)Entity\.class/);
     const entityName = clsMatch ? clsMatch[1] : 'Entity';
@@ -6814,7 +6486,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // WORLD DATA IS AIR: world.isEmptyBlock(pos)
   if (expr.includes('.isEmptyBlock(')) {
     let xStr = 'x', yStr = 'y', zStr = 'z';
     const startIdx = expr.indexOf('.isEmptyBlock(') + '.isEmptyBlock('.length;
@@ -6852,7 +6523,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // ENTITY GETTERS — resolve receiver expression before building the block
   const entityDepBlock = (rawEnt: string): BlockASTNode =>
     (!rawEnt || rawEnt === 'entity' || rawEnt === 'player' || rawEnt === 'living' || rawEnt === '_player')
       ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' }
@@ -6909,7 +6579,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // ENTITY FOOD LEVEL: entity.getFoodData().getFoodLevel() / entity.getFoodLevel() → entity_foodlevel
   if (expr.includes('.getFoodData().getFoodLevel()') || expr.includes('.getFoodLevel()')) {
     const rawEntity = expr.replace(/\.getFoodData\(\)\.getFoodLevel\(\)/, '').replace(/\.getFoodLevel\(\)/, '').trim();
     return {
@@ -6921,9 +6590,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // ---------------------------------------------------------------------------
-  // COMMAND ARGUMENT GETTERS
-  // ---------------------------------------------------------------------------
   if (expr.includes('EntityArgument.getEntity(') || expr.includes('EntityArgument.getOptionalEntity(')) {
     const match = expr.match(/getEntity\s*\([^,]+,\s*"([^"]+)"\)/);
     const paramName = match ? match[1] : 'name';
@@ -7044,9 +6710,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // ---------------------------------------------------------------------------
-  // DAMAGE PROCEDURES EXPRESSIONS
-  // ---------------------------------------------------------------------------
   if (expr.includes('.damageSources().source(') || expr.includes('DamageSource.of(')) {
     const hasSource = expr.includes('sourceentity') || expr.includes('sourceEntity');
     const hasDirect = expr.includes('immediatesourceentity') || expr.includes('immediateSourceEntity');
@@ -7151,9 +6814,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // ---------------------------------------------------------------------------
-  // DIRECTION PROCEDURES EXPRESSIONS
-  // ---------------------------------------------------------------------------
   if (expr.includes('.getOpposite()')) {
     return {
       id: `dir_opp_${seq}`,
@@ -7246,9 +6906,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // ---------------------------------------------------------------------------
-  // PROJECTILE EXPRESSIONS
-  // ---------------------------------------------------------------------------
   if (expr.includes('new ThrownPotion(')) {
     return {
       id: `proj_pot_${seq}`,
@@ -7312,9 +6969,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // ---------------------------------------------------------------------------
-  // SLOT & GUI PROCEDURES EXPRESSIONS
-  // ---------------------------------------------------------------------------
   if (expr.includes('EditBox') && (expr.includes('.getValue()') || expr.includes('.getText()'))) {
     const nameMatch = expr.match(/"([^"]+)"/);
     const widgetName = nameMatch ? nameMatch[1] : 'textFieldName';
@@ -7384,9 +7038,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // ---------------------------------------------------------------------------
-  // VECTOR PROCEDURES EXPRESSIONS
-  // ---------------------------------------------------------------------------
   if (expr.includes('.distanceTo(') || expr.includes('.distanceToSqr(')) {
     const match = expr.match(/^([\s\S]+?)\.distanceTo(?:Sqr)?\(([\s\S]+)\)$/);
     if (match) {
@@ -7480,7 +7131,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     }
   }
 
-  // Vector coordinate getters: vec.x, vec.y, vec.z or vec.x(), vec.y(), vec.z()
   if (expr.endsWith('.x') || expr.endsWith('.x()')) {
     const target = expr.replace(/\.x(\(\))?$/, '');
     return {
@@ -7512,9 +7162,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // ---------------------------------------------------------------------------
-  // ADVANCED PROCEDURES EXPRESSIONS
-  // ---------------------------------------------------------------------------
   if (expr.includes('dependencies.get(')) {
     const match = expr.match(/dependencies\.get\s*\("([^"]+)"\)/);
     const depName = match ? match[1] : 'name';
@@ -7572,7 +7219,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // Procedure call as expression: SomeProcedure.execute(...)
   const callProcExprMatch = expr.match(/^([A-Za-z0-9_]+)\.execute\s*\(([\s\S]*)\)$/);
   if (callProcExprMatch && !expr.startsWith('this.') && !expr.startsWith('super.')) {
     const procName = callProcExprMatch[1].replace(/Procedure$/, '');
@@ -7585,9 +7231,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // ---------------------------------------------------------------------------
-  // MINECRAFT COMPONENTS
-  // ---------------------------------------------------------------------------
   if (expr.startsWith('InteractionResult.')) {
     const match = expr.match(/InteractionResult\.([A-Z]+)/);
     const actType = match ? match[1] : 'SUCCESS';
@@ -7654,7 +7297,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // VECTOR CONSTRUCTOR: new Vec3(x, y, z)
   if (expr.startsWith('new Vec3(')) {
     const args = extractFunctionArguments(expr, 'new Vec3');
     return {
@@ -7670,7 +7312,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // COORDINATES: target.getX(), getX(), x
   const getXMatch = expr.match(/^([a-zA-Z0-9_().]+)?\.getX\(\)$/);
   if (getXMatch) {
     const rawEnt = (getXMatch[1] || '').trim();
@@ -7725,7 +7366,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     return { id: `z_${seq}`, type: 'coord_z', category: 'world', title: 'z' };
   }
 
-  // ITEMSTACK ITERATOR & PROVIDED ITEMSTACK IDENTIFIERS
   if (expr === 'itemstackiterator') {
     return {
       id: `iter_${seq}`,
@@ -7743,8 +7383,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // ITEM PROCEDURES EXPRESSIONS
-  // 1. ITEMSTACK GET COUNT: itemstack.getCount()
   if (expr.includes('.getCount()')) {
     const match = expr.match(/^([\s\S]+?)\.getCount\(\)$/);
     const targetExpr = match ? match[1].trim() : 'itemstack';
@@ -7757,7 +7395,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 2. ITEM FROM ITEMSTACK: itemstack.getItem()
   if (expr.endsWith('.getItem()')) {
     const target = expr.replace(/\.getItem\(\)$/, '').trim();
     return {
@@ -7769,7 +7406,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 3. ITEM GET DAMAGE & MAX DAMAGE
   if (expr.endsWith('.getDamageValue()') || expr.endsWith('.getDamage()')) {
     const target = expr.replace(/\.(getDamageValue|getDamage)\(\)$/, '').trim();
     return {
@@ -7792,7 +7428,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 4. ITEM MAX STACK SIZE
   if (expr.endsWith('.getMaxStackSize()')) {
     const target = expr.replace(/\.getMaxStackSize\(\)$/, '').trim();
     return {
@@ -7804,7 +7439,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 5. ITEM DISPLAY NAME: itemstack.getHoverName().getString() / itemstack.getHoverName()
   if (expr.includes('.getHoverName()')) {
     const match = expr.match(/^([\s\S]+?)\.getHoverName\(\)(?:\.getString\(\))?$/);
     const target = match ? match[1].trim() : 'itemstack';
@@ -7817,7 +7451,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 6. ITEM ENCHANTMENT LEVEL: itemstack.getEnchantmentLevel(...)
   if (expr.includes('.getEnchantmentLevel(')) {
     const match = expr.match(/^([\s\S]+?)\.getEnchantmentLevel\(([\s\S]+)\)$/);
     const target = match ? match[1].trim() : 'itemstack';
@@ -7834,7 +7467,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 7. ITEM CHECKS (isDamageable, isEnchanted, isEnchantable, isFood, isEmpty)
   if (expr.endsWith('.isDamageableItem()')) {
     const target = expr.replace(/\.isDamageableItem\(\)$/, '').trim();
     return {
@@ -7901,7 +7533,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // FLY / WALK SPEED PARAMETERS: (entity instanceof Player _plr ? _plr.getAbilities().getFlyingSpeed() : 0)
   if (expr.includes('getFlyingSpeed()')) {
     const entMatch = expr.match(/^([\s\S]+?)\s+instanceof\s+Player/);
     const targetEnt = entMatch ? entMatch[1].trim() : 'entity';
@@ -7926,7 +7557,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // ITEM NBT ITEMSTACK GET: ItemStack.parseOptional(...) / OPTIONAL_CODEC.parse(...)
   if (
     expr.includes('ItemStack.parseOptional(') ||
     expr.includes('ItemStack.OPTIONAL_CODEC.parse(') ||
@@ -7949,7 +7579,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 8. ITEM IN HAND / ARMOR GETTERS
   if (expr.endsWith('.getMainHandItem()')) {
     const target = expr.replace(/\.getMainHandItem\(\)$/, '').trim();
     return {
@@ -7988,7 +7617,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // 9. ITEM COOLDOWN CHECK: getCooldowns().isOnCooldown(...)
   if (expr.includes('getCooldowns().isOnCooldown(')) {
     const match = expr.match(/^([\s\S]+?)\.getCooldowns\(\)\.isOnCooldown\(([\s\S]+)\)$/);
     const target = match ? match[1].trim() : 'entity';
@@ -8005,7 +7633,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // MINECRAFT ITEM / BLOCK CONSTANTS: Blocks.OBSIDIAN, TheBackwoodsModBlocks.PETRIFIED_ROTTEN_OAK_WOOD.get()
   if (
     expr.startsWith('Blocks.') ||
     expr.startsWith('Items.') ||
@@ -8023,7 +7650,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // ENTITY TICK COUNT: entity.tickCount -> entity_get_tickcount
   if (expr.endsWith('.tickCount') || expr.endsWith('.tickCount)') || expr === 'entity.tickCount') {
     const rawEnt = expr.replace(/\.?tickCount\)?$/, '').replace(/^[\(]+/, '').trim();
     const entAST: BlockASTNode = (!rawEnt || rawEnt === 'entity' || rawEnt === 'player' || rawEnt === '_ent')
@@ -8039,7 +7665,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // LITERALS
   if (!isNaN(Number(expr))) {
     return {
       id: `num_${seq}`,
@@ -8071,7 +7696,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // DEPENDENCY LEAF IDENTIFIERS
   if (expr === 'sourceentity' || expr === 'sourceEntity' || expr === '_sourceentity') {
     return {
       id: `src_ent_${seq}`,
@@ -8121,7 +7745,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // STRING LITERALS (e.g. "backwoods_time" or 'backwoods_time')
   if ((expr.startsWith('"') && expr.endsWith('"')) || (expr.startsWith("'") && expr.endsWith("'"))) {
     const strVal = expr.slice(1, -1);
     return {
@@ -8133,7 +7756,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // IDENTIFIERS / VARIABLE GETTERS
   if (/^[a-zA-Z0-9_]+$/.test(expr)) {
     return {
       id: `var_${seq}`,
@@ -8144,7 +7766,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     };
   }
 
-  // FALLBACK SNIPPET FOR UNSUPPORTED COMPLEX EXPRESSION FRAGMENT (Value snippet)
   return {
     id: `snip_expr_${seq}`,
     type: 'custom_code_snippet',
@@ -8155,9 +7776,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/*                           Parsing Helper Utilities                         */
-/* -------------------------------------------------------------------------- */
 
 function isEnclosedInParens(s: string): boolean {
   if (!s.startsWith('(') || !s.endsWith(')')) return false;
@@ -8216,7 +7834,6 @@ function findComparisonOperator(s: string): { op: string; index: number; length:
       else if (depth === 0) {
         for (const op of ops) {
           if (s.substring(i, i + op.length) === op) {
-            // Prevent matching < or > inside generic type arguments
             if (op === '<' || op === '>') {
               const prev = s[i - 1];
               const next = s[i + 1];
@@ -8246,7 +7863,6 @@ function findLowestPrecedenceArithmeticOp(s: string, targetOps: string[]): numbe
       else if (ch === ')' || ch === '}' || ch === ']') depth--;
       else if (depth === 0) {
         if (targetOps.includes(ch)) {
-          // Avoid matching unary minus at start
           if (ch === '-' && (i === 0 || ['+', '-', '*', '/', '(', ','].includes(s[i - 1].trim()))) {
             continue;
           }
@@ -8336,9 +7952,6 @@ function countTotalBlocks(root: BlockASTNode): number {
   return count;
 }
 
-/* -------------------------------------------------------------------------- */
-/*                       Blockly XML Code Generation                          */
-/* -------------------------------------------------------------------------- */
 
 function generateBlocklyXmlFromAST(
   root: BlockASTNode,
@@ -8480,7 +8093,6 @@ function parseCommandStructureFromJava(
 
   const chainBody = cmdMatch[2];
 
-  // Helper function to extract top-level .then(...) and .executes(...) items from a chain body
   function extractTopChainItems(text: string): { type: 'then' | 'executes'; inner: string }[] {
     const results: { type: 'then' | 'executes'; inner: string }[] = [];
     let idx = 0;
@@ -8524,7 +8136,6 @@ function parseCommandStructureFromJava(
     return results;
   }
 
-  // Recursive parser to build AST nodes from a .then(...) inner segment
   function parseChain(segment: string): BlockASTNode[] {
     const nodes: BlockASTNode[] = [];
 
@@ -8595,7 +8206,6 @@ function parseCommandStructureFromJava(
       const rest = segment.substring(argMatch[0].length);
       const subItems = extractTopChainItems(rest);
 
-      // Check for greedyString or "arguments" parameter
       if (name === 'arguments' || argTypeStr.includes('greedyString')) {
         let procName: string | undefined;
         for (const item of subItems) {

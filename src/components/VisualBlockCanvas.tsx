@@ -30,7 +30,6 @@ interface VisualBlockCanvasProps {
   onSelectBlock?: (id: string, line?: number) => void;
 }
 
-// Color palette extracted directly from MCreator 2026.1 Blockly source & UI
 const MCREATOR_CATEGORY_THEMES: Record<
   string,
   {
@@ -409,7 +408,6 @@ function getNodeComplexity(node: BlockASTNode, depth = 0): { count: number; maxD
 function shouldUseExternalInputs(node: BlockASTNode, layoutMode: string = 'auto'): boolean {
   if (layoutMode === 'inline') return false;
   if (layoutMode === 'external') return true;
-  // Never force math, logic binary/comparison, or common procedural statements into external layout
   if (
     node.type.startsWith('math_') ||
     node.type === 'logic_compare' ||
@@ -423,7 +421,6 @@ function shouldUseExternalInputs(node: BlockASTNode, layoutMode: string = 'auto'
   ) {
     return false;
   }
-  // Auto mode: check values count and depth
   if (!node.values || node.values.length === 0) return false;
   if (node.values.length > 5) return true;
   const complexity = getNodeComplexity(node);
@@ -524,9 +521,7 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
     <div className={`flex flex-col bg-[#181a20] rounded-lg border border-[#2d323e] shadow-lg overflow-hidden font-sans text-xs transition-all ${
       isFullscreen ? 'fixed inset-3 z-50 shadow-2xl border-amber-500/50 bg-[#181a20]' : 'h-full'
     }`}>
-      {/* MCreator Blockly Top Bar */}
       <div className="bg-[#1e222b] px-2.5 sm:px-3 py-2 border-b border-[#2d323e] flex items-center justify-between gap-2 flex-wrap min-w-0">
-        {/* Left: Procedure Name & Search */}
         <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
           <div className="flex items-center space-x-1.5 px-2 py-1 bg-[#282d39] rounded border border-[#3b4252] text-[#e5e9f0] min-w-0 max-w-full shadow-xs">
             <Sparkles className="w-3.5 h-3.5 text-[#CEB098] shrink-0" />
@@ -544,7 +539,6 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
             </span>
           </div>
 
-          {/* Search Box */}
           <div className="relative flex items-center flex-1 min-w-[130px] max-w-xs">
             <Search className="w-3.5 h-3.5 absolute left-2.5 text-[#6c768a]" />
             <input
@@ -557,9 +551,7 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
           </div>
         </div>
 
-        {/* Right: View Toggles & Zoom Controls */}
         <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-          {/* View Mode Switcher */}
           <div className="flex items-center bg-[#14171d] p-0.5 rounded border border-[#2e3440] text-[11px]">
             <button
               onClick={() => setViewMode('blockly')}
@@ -584,7 +576,6 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
               <span className="sm:hidden">AST</span>
             </button>
           </div>
-          {/* Zoom Buttons & Fullscreen */}
           <div className="flex items-center bg-[#14171d] px-1.5 py-0.5 rounded border border-[#2e3440] text-[11px] text-[#7e889b]">
             <button
               onClick={() => setZoomLevel((z) => Math.max(40, z - 10))}
@@ -621,9 +612,7 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
         </div>
       </div>
 
-      {/* Canvas Workspace Area */}
       <div className="relative flex-1 bg-[#14171d] p-4 overflow-auto min-h-[420px] select-none">
-        {/* Subtle Canvas Dot Grid Background */}
         <div
           className="absolute inset-0 pointer-events-none opacity-20"
           style={{
@@ -632,7 +621,6 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
           }}
         />
 
-        {/* Scalable Container */}
         <div
           style={{
             transform: `scale(${zoomLevel / 100})`,
@@ -662,13 +650,11 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
           )}
         </div>
 
-        {/* Trash Bin Icon in Bottom Right (Classic Blockly Workspace Element) */}
         <div className="absolute bottom-4 right-4 p-2.5 rounded-full bg-[#1e222b] border border-[#2e3440] text-[#6c768a] hover:text-[#e5e9f0] shadow-md transition cursor-pointer">
           <Trash2 className="w-4 h-4" />
         </div>
       </div>
 
-      {/* MCreator Errors / Warnings Notification Strip */}
       {hasBlockTypeInAST(ast, 'entity_nbt_num_set') && (
         <div className="bg-[#12141a] px-3.5 py-1.5 border-t border-[#2d323e] text-[#e06c75] font-mono text-[11px] flex items-center gap-2 select-text">
           <span className="font-bold">errors (1):</span>
@@ -676,7 +662,6 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
         </div>
       )}
 
-      {/* MCreator Palette Legend Footer */}
       <div className="bg-[#1a1d24] px-3 py-1.5 border-t border-[#2d323e] flex items-center justify-between flex-wrap gap-2 text-[10px] text-[#7e889b]">
         <div className="flex items-center flex-wrap gap-2">
           <span className="text-[#a0a8b8] flex items-center mr-1 font-semibold">
@@ -697,9 +682,6 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
   );
 };
 
-/* -------------------------------------------------------------------------- */
-/*                 MCreator Blockly Visual Node Component                     */
-/* -------------------------------------------------------------------------- */
 
 const getBlockTheme = (node: BlockASTNode) => {
   if (node.type === 'args_start' || node.type === 'command_trigger') {
@@ -770,14 +752,12 @@ const BlocklyNodeRenderer: React.FC<{
   const isExternal = shouldUseExternalInputs(node, inputLayoutMode);
   const nodeRef = useRef<HTMLDivElement>(null);
 
-  // Scroll block into view when selected
   useEffect(() => {
     if (isSelected && nodeRef.current) {
       nodeRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [isSelected]);
 
-  // 1. Root Event Trigger Block
   if (node.type === 'event_trigger') {
     const triggerLabel = GLOBAL_TRIGGERS[eventTrigger || 'no_ext_trigger'] || 'No additional trigger';
 
@@ -791,7 +771,6 @@ const BlocklyNodeRenderer: React.FC<{
           isSelected ? '' : ''
         }`}
       >
-        {/* Banner Shape */}
         <div
           className="rounded-t-md rounded-br-md px-3 py-2 text-white shadow-md border-t border-l border-r flex flex-col gap-1 select-none"
           style={{
@@ -822,7 +801,6 @@ const BlocklyNodeRenderer: React.FC<{
           </div>
         </div>
 
-        {/* Puzzle Notch Connection Line to Next Statement */}
         <div
           className="w-3 h-1.5 ml-3 -mt-0.5 border-b border-l border-r"
           style={{
@@ -831,7 +809,6 @@ const BlocklyNodeRenderer: React.FC<{
           }}
         />
 
-        {/* Connected Statement Flow */}
         {node.next && (
           <div className="pl-0 mt-0">
             <BlocklyNodeRenderer
@@ -846,7 +823,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2. C-Shaped Control Blocks & Statement Containers (controls_if, controls_for, controls_forEach, controls_whileUntil, wait_ticks, aitask_wrapper, etc.)
   if (
     node.type === 'controls_if' ||
     node.type === 'controls_for' ||
@@ -867,7 +843,6 @@ const BlocklyNodeRenderer: React.FC<{
           isSelected ? '' : ''
         }`}
       >
-        {/* C-Block Header Bar */}
         <div
           className="rounded-t-md rounded-tr-md px-2.5 py-1.5 text-white shadow border flex items-center gap-2 flex-wrap min-w-[280px]"
           style={{
@@ -883,7 +858,6 @@ const BlocklyNodeRenderer: React.FC<{
           )}
           
 
-          {/* Fields */}
           {node.fields && Object.keys(node.fields).length > 0 && node.type !== 'world_entity_inrange_foreach' && (
             <div className="flex items-center gap-1">
               {Object.entries(node.fields).map(([k, v]) => (
@@ -895,7 +869,6 @@ const BlocklyNodeRenderer: React.FC<{
             </div>
           )}
 
-          {/* Inline Sockets for Value Inputs */}
           {node.type === 'entity_inventory_foreach' || node.type === 'block_inventory_foreach' ? (
             <div className="flex items-center gap-1.5 flex-wrap text-[11px] font-semibold flex-1">
               <span>
@@ -1002,7 +975,6 @@ const BlocklyNodeRenderer: React.FC<{
           )}
         </div>
 
-        {/* Statement Cavities (e.g. DO, DO0, DO1, ELSE, tasks) */}
         {node.statements && node.statements.length > 0 ? (
           node.statements.map((s, idx) => {
             let armLabel = s.name;
@@ -1022,7 +994,6 @@ const BlocklyNodeRenderer: React.FC<{
 
             return (
               <div key={idx} className="flex flex-col w-full">
-                {/* Arm Divider / Header for else-if and else branches */}
                 {node.type === 'controls_if' && s.name !== 'DO0' && (
                   <div
                     className="flex items-center gap-2 px-2.5 py-1 border-t border-b text-[11px] font-bold text-white/95 select-none shadow-sm"
@@ -1041,7 +1012,6 @@ const BlocklyNodeRenderer: React.FC<{
                 )}
 
                 <div className="flex items-stretch w-full">
-                  {/* Vertical Arm Spine */}
                   <div
                     className="w-6 flex flex-col items-center justify-start py-1 font-bold text-[10px] text-white/90 border-l border-r shadow-inner select-none shrink-0"
                     style={{
@@ -1052,7 +1022,6 @@ const BlocklyNodeRenderer: React.FC<{
                     {node.type === 'controls_if' ? 'do' : s.name}
                   </div>
 
-                  {/* Indented Statement Cavity */}
                   <div className="flex-1 p-0.5 min-h-[32px] my-0.5">
                     {s.block ? (
                       <BlocklyNodeRenderer
@@ -1083,7 +1052,6 @@ const BlocklyNodeRenderer: React.FC<{
           </div>
         )}
 
-        {/* C-Block Bottom Bar */}
         <div
           className="w-full h-2 rounded-b-md border-b border-l border-r shadow-sm"
           style={{
@@ -1092,7 +1060,6 @@ const BlocklyNodeRenderer: React.FC<{
           }}
         />
 
-        {/* Connect to Next Statement Block */}
         {node.next && (
           <div className="mt-0.5">
             <BlocklyNodeRenderer
@@ -1107,7 +1074,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.5 Specialized Variable Setter Block (Set {type} [Local/Global: var] to: [val])
   if (node.type.startsWith('variables_set_')) {
     const valBlock = node.values?.find(v => v.name === 'VAL')?.block;
     const entityBlock = node.values?.find(v => v.name === 'entity')?.block;
@@ -1181,7 +1147,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.6 Specialized Inventory Set Slot Block
   if (node.type === 'entity_set_slot' || node.type === 'block_set_slot') {
     const amountBlock = node.values?.find(v => v.name === 'amount')?.block;
     const itemBlock = node.values?.find(v => v.name === 'item')?.block;
@@ -1237,7 +1202,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // Clear all potion effects of entity (entity_clearpotions)
   if (node.type === 'entity_clearpotions') {
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
     return (
@@ -1268,7 +1232,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // Remove specific potion effect from entity (entity_remove_specific_potion_effect)
   if (node.type === 'entity_remove_specific_potion_effect') {
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
     const potion = node.fields?.potion || 'REGENERATION';
@@ -1304,7 +1267,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.7.5 DEAL DAMAGE (Deal [amount] damage to [entity] from source [damagesource])
   if (node.type === 'deal_damage') {
     const amtBlock = node.values?.find(v => v.name === 'amount')?.block;
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
@@ -1346,7 +1308,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // Set entity on fire: entity_set_on_fire
   if (node.type === 'entity_set_on_fire') {
     const secBlock = node.values?.find(v => v.name === 'seconds')?.block;
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
@@ -1383,7 +1344,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // Set team friendly fire: team_set_friendlyfire
   if (node.type === 'team_set_friendlyfire') {
     const nameBlock = node.values?.find(v => v.name === 'name')?.block;
     const condBlock = node.values?.find(v => v.name === 'condition')?.block;
@@ -1415,7 +1375,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.7.4 MOVE ENTITY (Set location of [entity] to x: [x] y: [y] z: [z])
   if (node.type === 'move_entity') {
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
     const xBlock = node.values?.find(v => v.name === 'x')?.block;
@@ -1490,7 +1449,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.7.5 NBT Set & Remove Operations (Entity, Block, Item, and CompoundTag)
   if (
     node.type.includes('_nbt_') ||
     node.type.startsWith('custom_nbt_') ||
@@ -1635,7 +1593,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.7.6 ITEM PROCEDURES & STACK MANIPULATIONS
   if (
     node.type.startsWith('item_') ||
     node.type.startsWith('itemstack_') ||
@@ -1776,7 +1733,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.6.5 Entity Data Parameter Set, Potion, Attribute Blocks
   if (
     node.type === 'entity_data_logic_set' ||
     node.type === 'entity_data_integer_set' ||
@@ -1894,7 +1850,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.6.5.5 ENTITY SEND CHAT: Send message [text] to [entity] show in action bar: [actbar]
   if (node.type === 'entity_send_chat') {
     const textBlock = node.values?.find(v => v.name === 'text')?.block;
     const actbarBlock = node.values?.find(v => v.name === 'actbar')?.block;
@@ -1959,7 +1914,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.6.5.6 ENTITY SWITCH DIMENSION: Switch dimension of [entity] to [dimension]
   if (node.type === 'entity_switch_dimension') {
     const rawDim = node.fields?.dimension || 'CUSTOM:TheGrain';
     const dimDisplay = rawDim.replace(/^CUSTOM:/, '');
@@ -2013,7 +1967,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.6.5.7 ENTITY NBT SETTERS: Set [entity] custom {number/logic/text} NBT tag [tagName] to [tagValue]
   if (
     node.type === 'entity_nbt_num_set' ||
     node.type === 'entity_nbt_logic_set' ||
@@ -2088,7 +2041,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.6.6 ENTITY DESPAWN: Despawn [ Event/target entity ]
   if (node.type === 'entity_despawn') {
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
     return (
@@ -2133,7 +2085,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.6.7 SPAWN PARTICLE MULTI
   if (node.type === 'spawn_particle_multi') {
     const countBlock = node.values?.find(v => v.name === 'count')?.block;
     const xBlock = node.values?.find(v => v.name === 'x')?.block;
@@ -2250,7 +2201,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.6.7.5 PLAY SOUND
   if (node.type === 'play_sound') {
     const rawSound = node.fields?.sound || 'sound';
     const soundDisplay = rawSound.replace(/^CUSTOM:/, '').replace(/^["']|["']$/g, '');
@@ -2342,7 +2292,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.6.8 SPAWN ENTITY (with rotation & velocity)
   if (node.type === 'spawn_entity_with_rotation_velocity' || node.type === 'spawn_entity') {
     const cleanEntName = node.fields?.entity?.replace('CUSTOM:', '') || 'CustomEntity';
     const xBlock = node.values?.find(v => v.name === 'x')?.block;
@@ -2405,7 +2354,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.6.9 SPAWN DROPPED ITEM (spawn_gem)
   if (node.type === 'spawn_gem') {
     const itemBlock = node.values?.find(v => v.name === 'block')?.block;
     const xBlock = node.values?.find(v => v.name === 'x')?.block;
@@ -2459,7 +2407,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.7 Call Procedure Block
   if (node.type === 'call_procedure') {
     const procName = node.fields?.procedure || node.title?.replace(/^Call procedure:\s*/, '') || 'procedure';
     return (
@@ -2497,7 +2444,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.7.5 Execute Command Block (Multi-line World/Coordinate Execute Command)
   if (node.type === 'execute_command') {
     const cmdBlock = node.values?.find(v => v.name === 'command')?.block;
     const xBlock = node.values?.find(v => v.name === 'x')?.block;
@@ -2579,7 +2525,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.8 Statement Custom Code Snippet
   if (node.type === 'custom_code_snippet' && !node.isSnippetValue) {
     return (
       <div
@@ -2618,7 +2563,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.8.4 Action Log Block
   if (node.type === 'action_log') {
     const level = node.fields?.level || 'info';
     const msgBlock = node.values?.find(v => v.name === 'message')?.block;
@@ -2666,7 +2610,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.8.4.5 Text Print Statement Block ("print [text]")
   if (node.type === 'text_print') {
     const textVal = node.values?.find(v => v.name === 'TEXT')?.block;
     return (
@@ -2709,7 +2652,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.8.4.6 Flow Statement Block ("break out ▾ of loop")
   if (node.type === 'controls_flow_statements') {
     const flowOp = node.fields?.FLOW || 'BREAK';
     const flowText = flowOp === 'BREAK' ? 'break out' : 'continue with next iteration';
@@ -2747,7 +2689,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.8.5 ENTITY ADD EXHAUSTION (Increase exhaustion of [entity] by [amount])
   if (node.type === 'entity_add_exhaustion') {
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
     const amtBlock = node.values?.find(v => v.name === 'amount')?.block;
@@ -2811,7 +2752,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.8.5.5 Player & GUI & World Action Statement Blocks
   if (
     node.type === 'entity_remove_xp' ||
     node.type === 'entity_set_food_level' ||
@@ -2912,7 +2852,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 2.9 Return statement blocks: return_logic, return_number, return_string, return_itemstack, etc.
   if (node.type.startsWith('return_')) {
     const returnVal = node.values?.find(v => v.name === 'return' || v.name === 'value')?.block;
     const returnTheme = MCREATOR_CATEGORY_THEMES.control;
@@ -2972,7 +2911,6 @@ const BlocklyNodeRenderer: React.FC<{
     );
   }
 
-  // 3. Compact Multi-Row Action Block (e.g. Set variable, NBT put, Play sound, Add potion)
   return (
     <div
       ref={nodeRef}
@@ -2990,7 +2928,6 @@ const BlocklyNodeRenderer: React.FC<{
           borderColor: theme.border,
         }}
       >
-        {/* Title / Action Name */}
         <div className="flex items-center justify-between gap-1.5 border-b border-white/20 pb-0.5">
           <span className="font-bold text-[11px] tracking-wide flex items-center gap-1">
             {node.title || node.type}
@@ -3003,7 +2940,6 @@ const BlocklyNodeRenderer: React.FC<{
           </div>
         </div>
 
-        {/* Stacked Parameter Fields */}
         {node.fields && Object.keys(node.fields).length > 0 && (
           <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
             {Object.entries(node.fields).map(([k, v]) => (
@@ -3015,7 +2951,6 @@ const BlocklyNodeRenderer: React.FC<{
           </div>
         )}
 
-        {/* Sockets for Sub-Values - External (Stacked Rows) vs Inline */}
         {node.values && node.values.length > 0 && (
           isExternal ? (
             <div className="flex flex-col gap-1 w-full pt-1 border-t border-white/20">
@@ -3079,9 +3014,6 @@ const BlocklyNodeRenderer: React.FC<{
   );
 });
 
-/* -------------------------------------------------------------------------- */
-/*                  Inline Expression & Getter Pill Renderers                 */
-/* -------------------------------------------------------------------------- */
 
 const InlineValueBlock: React.FC<{
   node: BlockASTNode;
@@ -3094,7 +3026,6 @@ const InlineValueBlock: React.FC<{
   const isSelected = checkIsNodeSelected(node, selectedLineNumber, selectedBlockId);
   const isExternal = shouldUseExternalInputs(node, inputLayoutMode);
 
-  // Logic Boolean Literal (`true` / `false`)
   if (node.type === 'logic_boolean') {
     const isTrue = node.fields?.BOOL === 'TRUE';
     return (
@@ -3111,7 +3042,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Math Number Literal: [ 0 ]
   if (node.type === 'math_number') {
     return (
       <div
@@ -3128,7 +3058,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Text Literal: “ text ”
   if (node.type === 'text') {
     const textVal = node.fields?.TEXT ?? (node.title ? node.title.replace(/^"|"$/g, '') : '');
     return (
@@ -3148,7 +3077,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Variables Getter: Get {type} [Local/Global: var ▾] (for entity: [entity])
   if (node.type.startsWith('variables_get_')) {
     const rawVar = node.fields?.VAR || node.title || 'var';
     const isGlobal = rawVar.startsWith('global:');
@@ -3191,7 +3119,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Entity Is Tagged In: Is [entity] tagged in entity tags as [ “tag” ]
   if (node.type === 'entity_is_tagged_in') {
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
     const tagBlock = node.values?.find(v => v.name === 'tag')?.block;
@@ -3231,7 +3158,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Entity Check Creative Mode: Has [ Event/target entity ] creative mode ability enabled
   if (node.type === 'entity_iscreative') {
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
     return (
@@ -3262,7 +3188,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Text Join: create text with [ ADD0 ] [ ADD1 ] ...
   if (node.type === 'text_join') {
     const addValues = node.values?.filter(v => v.name.startsWith('ADD')) || [];
     return (
@@ -3292,7 +3217,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Math Constant: Random [0,1), PI, E, etc.
   if (node.type === 'math_java_constants' || (node.type === 'math_dual_ops' && (node.fields?.OP === 'RANDOM' || node.title?.includes('Random')))) {
     const constLabel = node.fields?.CONSTANT === 'PI' ? 'π' : node.fields?.CONSTANT === 'E' ? 'e' : 'Random [0,1)';
     return (
@@ -3310,7 +3234,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Math Random Integer Between: Random integer between min: [min] and max: [max] included
   if (node.type === 'math_random_int_between') {
     const minBlock = node.values?.find(v => v.name === 'min')?.block;
     const maxBlock = node.values?.find(v => v.name === 'max')?.block;
@@ -3345,7 +3268,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Math Random Number Between: Random number between min: [min] and max: [max]
   if (node.type === 'math_random_number_between') {
     const minBlock = node.values?.find(v => v.name === 'min')?.block;
     const maxBlock = node.values?.find(v => v.name === 'max')?.block;
@@ -3379,7 +3301,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Math Clamp: [value] clamped between min: [min] and max: [max]
   if (node.type === 'math_clamp') {
     const valBlock = node.values?.find(v => v.name === 'value')?.block;
     const minBlock = node.values?.find(v => v.name === 'min')?.block;
@@ -3422,7 +3343,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Math Singular Ops: sin, cos, tan, abs, sqrt, round, etc.
   if (node.type === 'math_singular_ops') {
     const op = node.fields?.OP || 'SIN';
     const numBlock = node.values?.find(v => v.name === 'NUM')?.block;
@@ -3449,7 +3369,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // World Data Check Difficulty: Is difficulty in the provided world [ HARD ▾ ]
   if (node.type === 'world_data_checkdifficulty') {
     const diff = node.fields?.difficulty || 'HARD';
     return (
@@ -3470,7 +3389,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Potion Effect Level: Get effect amplifier of potion [potion ▾] for [entity] if active
   if (node.type === 'entity_potioneffectlevel') {
     const potion = node.fields?.potion || 'DARKNESS';
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
@@ -3497,7 +3415,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Potion Effect Remaining: Get remaining ticks of potion [potion ▾] for [entity]
   if (node.type === 'entity_potioneffectremaining') {
     const potion = node.fields?.potion || 'DARKNESS';
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
@@ -3523,7 +3440,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Has Active Potion: Has [entity] active potion [potion ▾]
   if (node.type === 'entity_haspotioneffect') {
     const potion = node.fields?.potion || 'DARKNESS';
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
@@ -3549,7 +3465,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Get Potion Item: Get [type ▾] of [potion ▾] as item
   if (node.type === 'item_get_potion') {
     const pType = node.fields?.type || 'POTION';
     const typeLabel = pType === 'SPLASH_POTION' ? 'Splash potion' : pType === 'LINGERING_POTION' ? 'Lingering potion' : 'Potion';
@@ -3573,7 +3488,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Potion Projectile: [potionType ▾] potion of [potion ▾] with acceleration ax: [ax] ay: [ay] az: [az] shooter: [shooter]
   if (node.type === 'projectiles_potion') {
     const pType = node.fields?.potionType || 'SPLASH_POTION';
     const typeLabel = pType === 'LINGERING_POTION' ? 'Lingering' : 'Splash';
@@ -3608,7 +3522,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Damage Source from type: Damage source of type: [ Thorns ▾ ]
   if (node.type === 'damagesource_from_type') {
     const rawType = node.fields?.damagetype || 'thorns';
     const cleanType = rawType.replace(/^CUSTOM:/, '').replace(/^DamageTypes\./, '');
@@ -3628,7 +3541,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Water blocks: isinwater, isinwater_orbubblecolumn, isinwaterrain_orbubblecolumn, is_underwater, block_is_waterloggable
   if (
     node.type === 'entity_isinwater' ||
     node.type === 'entity_isinwater_orbubblecolumn' ||
@@ -3662,7 +3574,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Burning / on fire block: Is [Event/target entity] burning (entity_isburning)
   if (node.type === 'entity_isburning' || node.type === 'entity_is_onfire') {
     const targetBlock = node.values?.find(v => v.name === 'entity')?.block;
     return (
@@ -3684,7 +3595,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Fire & Team Scoreboard blocks
   if (
     node.type === 'entity_get_fire_ticks' ||
     node.type === 'entity_isimmunetofire' ||
@@ -3714,7 +3624,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // World Data Height At: Get [ World surface ▾ ] height at x: [ x ] z: [ z ]
   if (node.type === 'world_data_heightat') {
     const rawType = node.fields?.heightmapType || 'MOTION_BLOCKING_NO_LEAVES';
     const label = rawType.includes('OCEAN') ? 'Ocean floor' : rawType.includes('WG') ? 'World surface (world gen)' : 'World surface';
@@ -3757,7 +3666,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Entity Dependencies: Event/target entity
   if (node.type === 'entity_from_deps') {
     return (
       <div
@@ -3772,7 +3680,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Entity Dependencies: Source entity
   if (node.type === 'source_entity_from_deps') {
     return (
       <div
@@ -3787,7 +3694,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Entity Dependencies: Immediate source entity
   if (node.type === 'immediate_source_entity_from_deps') {
     return (
       <div
@@ -3803,7 +3709,6 @@ const InlineValueBlock: React.FC<{
   }
 
 
-  // Entity Tick Count: Get number of ticks [entity] has existed for
   if (node.type === 'entity_get_tickcount') {
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
     return (
@@ -3833,7 +3738,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Entity coordinate positions (X position of [entity], Y position of [entity], Z position of [entity])
   if (node.type === 'entity_pos_x' || node.type === 'entity_pos_y' || node.type === 'entity_pos_z') {
     const axis = node.type === 'entity_pos_x' ? 'X' : node.type === 'entity_pos_y' ? 'Y' : 'Z';
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
@@ -3862,7 +3766,6 @@ const InlineValueBlock: React.FC<{
       </div>
     );
   }
-  // World Entity In Range Exists block renderer
   if (node.type === 'world_entity_inrange_exists') {
     const entName = (node.fields?.entity || 'Entity').replace(/^CUSTOM:/, '');
     const xVal = node.values?.find(v => v.name === 'x')?.block;
@@ -3894,7 +3797,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // World Data Is Air block renderer
   if (node.type === 'world_data_isair') {
     const xVal = node.values?.find(v => v.name === 'x')?.block;
     const yVal = node.values?.find(v => v.name === 'y')?.block;
@@ -3920,7 +3822,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Dimension ID block: entity_dimension_id
   if (node.type === 'entity_dimension_id') {
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
     return (
@@ -3935,7 +3836,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Dimension type block: get_dimensionid
   if (node.type === 'get_dimensionid') {
     const dimName = (node.fields?.dimension || node.title || 'Dimension').replace(/^CUSTOM:/, '');
     return (
@@ -3950,7 +3850,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Dimension comparison block: compare_dimensionids
   if (node.type === 'compare_dimensionids') {
     const aBlock = node.values?.find(v => v.name === 'a')?.block;
     const bBlock = node.values?.find(v => v.name === 'b')?.block;
@@ -3968,7 +3867,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Entity check game mode: entity_checkgamemode
   if (node.type === 'entity_checkgamemode') {
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
     const mode = node.fields?.gamemode || 'SPECTATOR';
@@ -3994,7 +3892,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Entity has item in inventory: entity_has_item_inventory
   if (node.type === 'entity_has_item_inventory') {
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
     const itemBlock = node.values?.find(v => v.name === 'item')?.block;
@@ -4020,7 +3917,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Entity food level block: entity_foodlevel / entity_get_food_level
   if (node.type === 'entity_foodlevel' || node.type === 'entity_get_food_level') {
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
     return (
@@ -4035,7 +3931,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Entity Iterator: Entity iterator
   if (node.type === 'entity_iterator') {
     return (
       <div
@@ -4052,7 +3947,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Coordinate getters: x, y, z
   if (node.type === 'coord_x' || node.type === 'coord_y' || node.type === 'coord_z') {
     const coord = node.type === 'coord_x' ? 'x' : node.type === 'coord_y' ? 'y' : 'z';
     return (
@@ -4070,7 +3964,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // MCItem All Block: [📦 Obsidian]
   if (node.type === 'mcitem_all') {
     const itemName = node.title || node.fields?.value || 'Item';
     return (
@@ -4088,7 +3981,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Itemstack Iterator Block
   if (node.type === 'itemstack_iterator') {
     return (
       <div
@@ -4104,7 +3996,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Expression Custom Code Snippet (Output Tab variant - can be plugged into ANY socket: entity, logic, text, math, damage, item, etc.)
   if (node.type === 'custom_code_snippet' || node.type === 'custom_code_snippet_output' || node.isSnippetValue) {
     const rawVal = node.fields?.CODE || node.title;
     const displayVal = !rawVal || rawVal === '(null)' ? '(null)' : rawVal;
@@ -4127,7 +4018,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Entity Null ("No entity")
   if (node.type === 'entity_null') {
     return (
       <div
@@ -4145,7 +4035,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Is Mod Loaded ("Is the mod with ID [ "forge" ] loaded")
   if (node.type === 'is_mod_loaded') {
     const modIdBlock = node.values?.find(v => v.name === 'modid')?.block;
     return (
@@ -4177,7 +4066,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Date and Time Category Blocks (time_seconds, time_minutes, time_hours, etc.)
   if (node.type.startsWith('time_')) {
     const timeLabels: Record<string, string> = {
       time_seconds: 'Seconds',
@@ -4207,7 +4095,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Procedure Return Value Blocks ("Call procedure and get ... return value")
   if (node.type.startsWith('procedure_retval_')) {
     const procName = node.fields?.procedure || node.title || 'No entry selected';
     const returnType = node.type.replace('procedure_retval_', '');
@@ -4229,7 +4116,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Custom Dependency Blocks ("... dependency dependencyName")
   if (node.type.startsWith('custom_dependency_')) {
     const depType = node.type.replace('custom_dependency_', '').replace(/_/g, ' ');
     const depName = node.fields?.dependencyName || node.title || 'dependencyName';
@@ -4251,7 +4137,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // MCreator Link Category Blocks
   if (node.type.startsWith('mcreator_link_')) {
     const title = node.title || node.type.replace('mcreator_link_', '').replace(/_/g, ' ');
     return (
@@ -4269,7 +4154,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Vectors Category Blocks
   if (node.type.startsWith('vector_')) {
     const vTheme = { headerBg: '#7058a6', border: '#5d4691' };
     const xVal = node.values?.find(v => v.name === 'x')?.block;
@@ -4363,7 +4247,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Text Operations Category Blocks
   if (
     node.type === 'text_length' ||
     node.type === 'text_newline' ||
@@ -4482,7 +4365,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Math Number from Text & Math Lerp
   if (node.type === 'math_from_text' || node.type === 'math_lerp') {
     const mTheme = { headerBg: '#5b67a5', border: '#485387' };
     const textVal = node.values?.find(v => v.name === 'NUM' || v.name === 'text')?.block;
@@ -4520,7 +4402,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Logic Negate & Ternary & Specific Comparisons
   if (
     node.type === 'logic_negate' ||
     node.type === 'logic_ternary' ||
@@ -4732,7 +4613,6 @@ const InlineValueBlock: React.FC<{
     }
   }
 
-  // Minecraft Component Dependents & Constants
   if (
     node.type === 'damagesource_from_deps' ||
     node.type === 'direction_constant' ||
@@ -4820,7 +4700,6 @@ const InlineValueBlock: React.FC<{
     }
   }
 
-  // World Data & GUI Getter Inline Value Blocks
   if (node.type.startsWith('world_data_') || node.type.startsWith('gui_get_') || node.type.startsWith('entity_from_')) {
     const wBg = node.type.startsWith('gui_') ? '#488b49' : '#5b80a5';
     const wBorder = node.type.startsWith('gui_') ? '#275728' : '#354d64';
@@ -4860,7 +4739,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // NBT Getters, Checks, and Tag Operations
   if (
     node.type.startsWith('entity_nbt_') ||
     node.type.startsWith('block_nbt_') ||
@@ -4997,7 +4875,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Entity Synced Data Parameters: For custom entity [entity] of type [Type] get [integer/logic/string] data parameter [accessor] value
   if (
     node.type === 'entity_data_integer_get' ||
     node.type === 'entity_data_logic_get' ||
@@ -5049,7 +4926,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Text binary compare: %1 = %2 (Blockly block: text_binary_ops)
   if (node.type === 'text_binary_ops') {
     const leftVal = node.values?.find(v => v.name === 'A')?.block;
     const rightVal = node.values?.find(v => v.name === 'B')?.block;
@@ -5089,7 +4965,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Binary Arithmetic: [A] + [B]
   if (node.type === 'math_binary' || node.type === 'math_dual_ops') {
     const leftVal = node.values?.find(v => v.name === 'A')?.block;
     const rightVal = node.values?.find(v => v.name === 'B')?.block;
@@ -5128,14 +5003,12 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Comparison & Logic Binary (`==`, `!=`, `<`, `>`, `AND`, `OR`)
   if (node.type === 'logic_compare' || node.type === 'logic_binary') {
     const leftVal = node.values?.find((v) => v.name === 'A')?.block;
     const rightVal = node.values?.find((v) => v.name === 'B')?.block;
     const op = node.fields?.OP || node.title || '==';
 
     if (isExternal) {
-      // True MCreator External Input Layout: Stacked vertically with socket notch indicators
       return (
         <div
           onClick={(e) => {
@@ -5146,7 +5019,6 @@ const InlineValueBlock: React.FC<{
           }`}
           style={{ backgroundColor: theme.headerBg, borderColor: theme.border }}
         >
-          {/* Top Row: Left value (Socket A) */}
           <div className="flex items-center gap-1.5 px-2 py-1 border-b border-black/15">
             <span className="w-2.5 h-2.5 rounded-xs bg-black/40 flex items-center justify-center text-[8px] opacity-70">◖</span>
             {leftVal && (
@@ -5160,7 +5032,6 @@ const InlineValueBlock: React.FC<{
             )}
           </div>
 
-          {/* Bottom Row: Operator Dropdown + Right value (Socket B) */}
           <div className="flex items-center gap-1.5 px-2 py-1 bg-black/10">
             <span className="font-bold px-1.5 py-0.5 rounded bg-black/40 border border-white/20 text-yellow-200 text-[10px] flex items-center gap-1">
               {op} <span className="text-[8px] opacity-70">▼</span>
@@ -5180,7 +5051,6 @@ const InlineValueBlock: React.FC<{
       );
     }
 
-    // True MCreator Inline Input Layout: Flat horizontal chain
     return (
       <div
         onClick={(e) => {
@@ -5216,7 +5086,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Item Expression Getters
   if (
     node.type.startsWith('item_') ||
     node.type.startsWith('itemstack_') ||
@@ -5345,7 +5214,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Player / Entity Walk & Fly Speed Getters
   if (node.type === 'entity_get_fly_speed' || node.type === 'entity_get_walk_speed') {
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
     const isFly = node.type === 'entity_get_fly_speed';
@@ -5371,7 +5239,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // World execute command: Execute command / [command] at x: [x] y: [y] z: [z]
   if (node.type === 'execute_command') {
     const cmdBlock = node.values?.find(v => v.name === 'command')?.block;
     const xBlock = node.values?.find(v => v.name === 'x')?.block;
@@ -5428,7 +5295,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Command Parameters Getter Blocks (e.g. get_command_parameter_number, get_command_parameter_string, get_command_parameter_logic, etc.)
   if (
     node.type.startsWith('get_command_parameter_') ||
     node.category === 'command_param' ||
@@ -5516,7 +5382,6 @@ const InlineValueBlock: React.FC<{
       );
     }
 
-    // Standard Command Parameter Blocks (Get command number parameter, Get command string parameter, etc.)
     const titleText = node.title || (
       node.type === 'get_command_parameter_number' ? 'Get command number parameter' :
       node.type === 'get_command_parameter_string' ? 'Get command string parameter' :
@@ -5542,7 +5407,6 @@ const InlineValueBlock: React.FC<{
     );
   }
 
-  // Default Value Pill / Getter Block
   return (
     <div
       onClick={(e) => {
@@ -5558,7 +5422,6 @@ const InlineValueBlock: React.FC<{
     >
       <span className="font-medium text-[11px]">{node.title}</span>
 
-      {/* Fields */}
       {node.fields?.param && (
         <span className="font-mono font-bold bg-white/95 text-[#14171d] px-1.5 py-0.2 rounded text-[10px] shadow-xs">
           {node.fields.param}
@@ -5595,7 +5458,6 @@ const InlineValueBlock: React.FC<{
         </span>
       )}
 
-      {/* Nested Values */}
       {node.values && node.values.length > 0 && (
         <div className="flex items-center gap-1 flex-wrap">
           {node.values.map((v, idx) =>
@@ -5616,9 +5478,6 @@ const InlineValueBlock: React.FC<{
   );
 });
 
-/* -------------------------------------------------------------------------- */
-/*                     Tree AST Inspector Fallback View                       */
-/* -------------------------------------------------------------------------- */
 
 const TreeASTInspector: React.FC<{
   node: BlockASTNode;

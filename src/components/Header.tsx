@@ -34,7 +34,6 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   return (
     <header className="border-b border-[#2A2622] bg-[#161412] px-2.5 sm:px-3 py-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sticky top-0 z-50 text-[#F5F2EB] text-xs min-w-0">
-      {/* Brand Title Row */}
       <div className="flex items-center justify-between w-full sm:w-auto shrink-0">
         <div className="flex items-center space-x-2">
           <div className="p-1 rounded bg-[#2A241F] border border-[#52463C] text-[#E8D8C8] flex items-center justify-center shadow-inner shrink-0">
@@ -50,7 +49,6 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Quick Reset on Mobile Title Bar */}
         <button
           onClick={onReset}
           disabled={isTranslating}
@@ -61,9 +59,7 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
       </div>
 
-      {/* Selectors & Actions */}
       <div className="flex items-center flex-wrap gap-1.5 sm:gap-2 text-xs min-w-0 w-full sm:w-auto justify-start sm:justify-end">
-        {/* Element Type Selector */}
         <CustomDropdown<MCreatorElementType>
           value={elementType}
           onChange={onChangeElementType}
@@ -77,7 +73,6 @@ export const Header: React.FC<HeaderProps> = ({
           ]}
         />
 
-        {/* NeoForge Version Selector */}
         <CustomDropdown<NeoForgeVersion>
           value={neoForgeVersion}
           onChange={onChangeNeoForgeVersion}
@@ -90,7 +85,6 @@ export const Header: React.FC<HeaderProps> = ({
           ]}
         />
 
-        {/* Registered Block Database Library Button */}
         <button
           onClick={onOpenBlockLibrary}
           className="px-2.5 py-1 text-xs font-medium rounded-md bg-[#24201D] hover:bg-[#2E2925] text-[#CEB098] border border-[#524438] transition flex items-center space-x-1.5 cursor-pointer shadow-xs shrink-0 whitespace-nowrap"
@@ -100,7 +94,6 @@ export const Header: React.FC<HeaderProps> = ({
           <span>Block Registry (1,000+)</span>
         </button>
 
-        {/* Actions */}
         {hasResult && (
           <>
             <button
@@ -123,7 +116,6 @@ export const Header: React.FC<HeaderProps> = ({
           </>
         )}
 
-        {/* Desktop Reset Button */}
         <button
           onClick={onReset}
           disabled={isTranslating}

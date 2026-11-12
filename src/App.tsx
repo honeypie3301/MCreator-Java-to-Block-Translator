@@ -16,7 +16,6 @@ const BreakdownTable = lazy(() => import('./components/BreakdownTable').then(m =
 
 const DEFAULT_JAVA_INPUT = `package net.mcreator.thebackwoods.procedures;
 
-/* imports omitted */
 
 public class SharpenedSplinterShardItemInInventoryTickProcedure {
 	public static void execute(LevelAccessor world, Entity entity) {
@@ -43,16 +42,13 @@ export default function App() {
   const [selectedMethod, setSelectedMethod] = useState<string | undefined>(undefined);
   const [isBlockLibraryOpen, setIsBlockLibraryOpen] = useState<boolean>(false);
 
-  // "Already Converted" Popup State
   const [showAlreadyConvertedToast, setShowAlreadyConvertedToast] = useState<boolean>(false);
 
   const [activeTab, setActiveTab] = useState<'visual' | 'xml' | 'spec' | 'breakdown'>('visual');
 
-  // Convert Java code to MCreator Blockly XML deterministically
   const handleTranslate = (methodOverride?: string, force?: boolean) => {
     if (!code.trim()) return;
 
-    // Check if code has already been converted without changes
     const methodToUse = methodOverride !== undefined ? methodOverride : selectedMethod;
     if (
       !force &&
@@ -69,23 +65,23 @@ export default function App() {
     setError(null);
     setShowAlreadyConvertedToast(false);
 
-    try {
-      // Deterministic AST & Blockly XML conversion based on MCreator GitHub database
-      const res = translateJavaToMCreator(code, elementType, neoForgeVersion, 'auto', methodToUse);
-      setResult(res);
-      setLastConvertedCode(code);
-      if (res.activeMethodName) {
-        setSelectedMethod(res.activeMethodName);
+    setTimeout(() => {
+      try {
+        const res = translateJavaToMCreator(code, elementType, neoForgeVersion, 'auto', methodToUse);
+        setResult(res);
+        setLastConvertedCode(code);
+        if (res.activeMethodName) {
+          setSelectedMethod(res.activeMethodName);
+        }
+      } catch (err: any) {
+        console.error(err);
+        setError(err.message || 'Failed to convert Java code into MCreator Blockly XML.');
+      } finally {
+        setIsTranslating(false);
       }
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Failed to convert Java code into MCreator Blockly XML.');
-    } finally {
-      setIsTranslating(false);
-    }
+    }, 16);
   };
 
-  // Reset editor code
   const handleReset = () => {
     setCode('');
     setLastConvertedCode('');
@@ -93,7 +89,6 @@ export default function App() {
     setError(null);
   };
 
-  // Copy XML to clipboard
   const handleCopyXml = () => {
     if (!result?.blocklyXml) return;
     navigator.clipboard.writeText(result.blocklyXml);
@@ -101,7 +96,6 @@ export default function App() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Export native MCreator .ptpl, .aitpl, .cmdtpl, or .ftpl template files (XML -> Base64 -> GZip)
   const handleExportFile = () => {
     if (!result?.blocklyXml) return;
     const ext = result.fileExtension || '.ptpl';
@@ -136,18 +130,15 @@ export default function App() {
   };
 
 
-  // Auto-translate on initial load and change of element type or version
   const isFirstMount = React.useRef(true);
 
-  // Initial load auto-translate — deferred so UI paints first
   useEffect(() => {
     const timer = setTimeout(() => {
       if (code.trim()) handleTranslate(undefined, true);
     }, 50);
     return () => clearTimeout(timer);
-  }, []); // only on mount
+  }, []);
 
-  // Re-translate when element type or version changes (skip the very first mount)
   useEffect(() => {
     if (isFirstMount.current) {
       isFirstMount.current = false;
@@ -161,7 +152,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col font-sans bg-[#121110] text-[#F5F2EB]">
-      {/* Top Header */}
       <Header
         elementType={elementType}
         onChangeElementType={setElementType}
@@ -177,13 +167,11 @@ export default function App() {
         fileExtension={result?.fileExtension || '.ptpl'}
       />
 
-      {/* Block Library Modal */}
       <BlockLibraryModal
         isOpen={isBlockLibraryOpen}
         onClose={() => setIsBlockLibraryOpen(false)}
       />
 
-      {/* "Already Converted" Pop-up Alert Banner */}
       {showAlreadyConvertedToast && (
         <div className="bg-[#1e2316] border-b border-emerald-600/50 px-3 py-1.5 flex items-center justify-between gap-2 text-emerald-200 text-xs min-w-0 shadow-md transition-all animate-fadeIn">
           <div className="flex items-center space-x-2">
@@ -201,7 +189,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Feature (.ftpl) Single Window Warning Banner */}
       {elementType === 'feature' && (
         <div className="bg-[#2a1d18] border-b border-amber-600/50 px-3 py-1.5 flex items-center justify-between gap-2 text-amber-200 text-xs min-w-0 flex-wrap sm:flex-nowrap shadow-md transition-all animate-fadeIn">
           <div className="flex items-center space-x-2">
@@ -219,9 +206,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Grid View - Responsive Layout */}
       <main className="flex-1 p-1.5 sm:p-2.5 grid grid-cols-1 lg:grid-cols-12 gap-2.5 max-w-[1920px] w-full mx-auto min-h-0 lg:h-[calc(100vh-3.2rem)]">
-        {/* Left Column: Java Code Editor */}
         <div className="lg:col-span-5 flex flex-col h-[520px] lg:h-full min-h-[380px]">
           <JavaEditorPanel
             code={code}
@@ -236,11 +221,8 @@ export default function App() {
           />
         </div>
 
-        {/* Right Column: MCreator Block Translation Canvas */}
         <div className="lg:col-span-7 flex flex-col h-[560px] lg:h-full min-h-[420px] bg-[#181614] border border-[#2E2925] rounded-lg overflow-hidden shadow-sm">
-          {/* Navigation Tabs - Responsive */}
           <div className="bg-[#121110] border-b border-[#2E2925] px-2.5 py-1.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 text-xs min-w-0">
-            {/* Horizontal Scrollable Tabs */}
             <div className="flex items-center gap-1 overflow-x-auto min-w-0 scrollbar-none py-0.5 w-full sm:w-auto">
               <button
                 onClick={() => setActiveTab('visual')}
@@ -295,7 +277,6 @@ export default function App() {
               </button>
             </div>
 
-            {/* Right: Method selector & Procedure Name Pill */}
             {result && (
               <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 min-w-0 w-full sm:w-auto pt-1 sm:pt-0 border-t sm:border-t-0 border-[#221E1B]">
                 {result.detectedMethods && result.detectedMethods.length > 1 && (
@@ -330,7 +311,6 @@ export default function App() {
               </div>
             )}
           </div>
-          {/* Tab View Body */}
           <div className="flex-1 p-3 bg-[#0F0E0D] overflow-auto min-h-0 flex flex-col">
             {isTranslating ? (
               <div className="h-full flex flex-col items-center justify-center text-center space-y-3 py-12">

@@ -11,7 +11,6 @@ const PORT = process.env.NODE_ENV === "production" ? (process.env.PORT ? parseIn
 
 app.use(express.json({ limit: "10mb" }));
 
-// System instructions for MCreator 2026.1 + NeoForge 1.21.1 Java to Blockly conversion
 const MCREATOR_SYSTEM_INSTRUCTION = `You are an expert MCreator 2026.1+ and Minecraft NeoForge 1.21.1+ mod development assistant.
 Your task is to analyze Java code (event listeners, procedural methods, conditionals, math, entity/world interactions) and translate it into valid MCreator 2026.1 Blockly XML procedure structure and a visual AST representation.
 
@@ -140,7 +139,6 @@ Return a valid JSON object strictly matching the following keys:
     try {
       parsedData = JSON.parse(text);
     } catch (parseErr) {
-      // Fallback clean if code blocks were returned
       const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
       parsedData = JSON.parse(cleaned);
     }
@@ -154,7 +152,6 @@ Return a valid JSON object strictly matching the following keys:
   }
 });
 
-// XML validation endpoint
 app.post("/api/validate-xml", (req, res) => {
   const { xml } = req.body;
   if (!xml || typeof xml !== "string") {

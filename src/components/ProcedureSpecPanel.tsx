@@ -16,9 +16,7 @@ export const ProcedureSpecPanel: React.FC<ProcedureSpecPanelProps> = ({ result }
   }, []);
   return (
     <div className="space-y-4 font-mono text-xs">
-      {/* Overview Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Card 1: Element & Engine Spec */}
         <div className="bg-[#181614] border border-[#2E2925] rounded-lg p-3 space-y-2">
           <div className="flex items-center space-x-2 text-[#FAF6F0] font-semibold border-b border-[#2E2925] pb-2">
             <Cpu className="w-4 h-4 text-[#CEB098]" />
@@ -54,7 +52,6 @@ export const ProcedureSpecPanel: React.FC<ProcedureSpecPanelProps> = ({ result }
           </div>
         </div>
 
-        {/* Card 2: Dependencies Required */}
         <div className="bg-[#181614] border border-[#2E2925] rounded-lg p-3 space-y-2">
           <div className="flex items-center space-x-2 text-[#FAF6F0] font-semibold border-b border-[#2E2925] pb-2">
             <Layers className="w-4 h-4 text-[#CEB098]" />
@@ -81,7 +78,6 @@ export const ProcedureSpecPanel: React.FC<ProcedureSpecPanelProps> = ({ result }
         </div>
       </div>
 
-      {/* Variables Section */}
       <div className="bg-[#181614] border border-[#2E2925] rounded-lg p-3 space-y-2">
         <div className="flex items-center space-x-2 text-[#FAF6F0] font-semibold border-b border-[#2E2925] pb-2">
           <Variable className="w-4 h-4 text-[#CEB098]" />
@@ -119,7 +115,6 @@ export const ProcedureSpecPanel: React.FC<ProcedureSpecPanelProps> = ({ result }
         )}
       </div>
 
-      {/* NeoForge Version Compatibility Details */}
       <div className="bg-[#181614] border border-[#2E2925] rounded-lg p-3 space-y-2">
         <div className="flex items-center space-x-2 text-[#CEB098] font-semibold border-b border-[#2E2925] pb-2">
           <ShieldCheck className="w-4 h-4 text-[#CEB098]" />
@@ -135,7 +130,6 @@ export const ProcedureSpecPanel: React.FC<ProcedureSpecPanelProps> = ({ result }
         </ul>
       </div>
 
-      {/* Database Reference Catalogue */}
       <div className="bg-[#181614] border border-[#2E2925] rounded-lg p-3 space-y-2">
         <div className="flex items-center space-x-2 text-[#FAF6F0] font-semibold border-b border-[#2E2925] pb-2">
           <Database className="w-4 h-4 text-[#CEB098]" />

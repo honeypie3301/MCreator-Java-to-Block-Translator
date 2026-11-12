@@ -172,9 +172,6 @@ export function getBlockCanonicalCategory(block: BlockDefinition): string {
   return 'Advanced';
 }
 
-// =========================================================================
-// STATIC PRECOMPUTATIONS: Done ONCE at module load to guarantee 0ms open lag
-// =========================================================================
 interface IndexedBlockItem {
   block: BlockDefinition;
   canonicalCategory: string;
@@ -211,7 +208,6 @@ const STATIC_INDEXED_BLOCKS: IndexedBlockItem[] = STATIC_UNIQUE_BLOCKS.map((bloc
     else if (block.toolbox.includes('management') || block.toolbox.includes('action')) subBreadcrumb = 'Actions';
   }
 
-  // Pre-bake search string for ultra-fast substring checks
   const javaKeywords = (block.javaPatterns || []).join(' ');
   const searchKey = `${block.title || ''} ${block.mcreatorType || ''} ${block.id || ''} ${block.description || ''} ${canonicalCategory} ${subBreadcrumb} ${javaKeywords}`.toLowerCase();
 
@@ -241,7 +237,7 @@ const STATIC_CATEGORY_COUNTS: Record<string, number> = (() => {
   return counts;
 })();
 
-const PAGE_SIZE = 48; // Fast chunk rendering
+const PAGE_SIZE = 48;
 
 export const BlockLibraryModal: React.FC<BlockLibraryModalProps> = ({ isOpen, onClose }) => {
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -249,7 +245,6 @@ export const BlockLibraryModal: React.FC<BlockLibraryModalProps> = ({ isOpen, on
   const [displayLimit, setDisplayLimit] = useState<number>(PAGE_SIZE);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Reset pagination on search or category filter change
   useEffect(() => {
     setDisplayLimit(PAGE_SIZE);
     if (scrollContainerRef.current) {
@@ -257,7 +252,6 @@ export const BlockLibraryModal: React.FC<BlockLibraryModalProps> = ({ isOpen, on
     }
   }, [searchQuery, selectedCategory]);
 
-  // Filter blocks instantaneously
   const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const isAll = selectedCategory === 'All Blocks';
@@ -271,7 +265,6 @@ export const BlockLibraryModal: React.FC<BlockLibraryModalProps> = ({ isOpen, on
     });
   }, [searchQuery, selectedCategory]);
 
-  // Infinite scroll loader: load more blocks smoothly
   const handleScroll = useCallback(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
@@ -288,7 +281,6 @@ export const BlockLibraryModal: React.FC<BlockLibraryModalProps> = ({ isOpen, on
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-1.5 sm:p-4 overflow-hidden">
       <div className="bg-[#161412] border border-[#3B342E] rounded-xl w-full max-w-6xl h-[92vh] max-h-[92vh] sm:h-[88vh] flex flex-col shadow-2xl overflow-hidden font-sans text-xs text-[#FAF6F0]">
-        {/* Top Header */}
         <div className="bg-[#121110] border-b border-[#2A2622] px-3.5 py-2 flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center space-x-2.5 min-w-0">
             <div className="p-1.5 rounded bg-[#2A241F] border border-[#52463C] text-[#CEB098] shrink-0">
@@ -318,7 +310,6 @@ export const BlockLibraryModal: React.FC<BlockLibraryModalProps> = ({ isOpen, on
           </button>
         </div>
 
-        {/* Filter Controls Bar */}
         <div className="bg-[#181614] border-b border-[#2A2622] px-3 py-2 flex items-center justify-between gap-2.5 flex-wrap text-xs shrink-0">
           <div className="relative flex-1 min-w-[200px] max-w-xl">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-[#7E756B]" />
@@ -339,9 +330,7 @@ export const BlockLibraryModal: React.FC<BlockLibraryModalProps> = ({ isOpen, on
           </div>
         </div>
 
-        {/* Main Content Body */}
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
-          {/* Category Selector: Horizontal on mobile, vertical sidebar on md+ */}
           <div className="md:w-56 bg-[#121110] border-b md:border-b-0 md:border-r border-[#2A2622] p-1.5 md:p-2 overflow-x-auto md:overflow-y-auto shrink-0 flex md:flex-col gap-1 font-mono text-[11px] scrollbar-none">
             {ALL_TOOLBOX_CATEGORIES.map((cat) => {
               const theme = CATEGORY_COLORS[cat] || { bg: '#4A423B', text: '#ffffff', border: '#332D28' };
@@ -375,7 +364,6 @@ export const BlockLibraryModal: React.FC<BlockLibraryModalProps> = ({ isOpen, on
             })}
           </div>
 
-          {/* Right Blocks Grid View */}
           <div
             ref={scrollContainerRef}
             onScroll={handleScroll}
@@ -395,7 +383,6 @@ export const BlockLibraryModal: React.FC<BlockLibraryModalProps> = ({ isOpen, on
                       key={block.id}
                       className="bg-[#161412] border border-[#28231F] rounded-lg p-2.5 flex flex-col justify-between space-y-2 shadow-xs hover:border-[#524438] transition min-w-0 overflow-hidden"
                     >
-                      {/* Block Title Header */}
                       <div className="min-w-0">
                         <div className="flex items-center justify-between gap-1.5 mb-1.5 min-w-0 flex-wrap">
                           <span
@@ -434,7 +421,6 @@ export const BlockLibraryModal: React.FC<BlockLibraryModalProps> = ({ isOpen, on
                         )}
                       </div>
 
-                      {/* Block Badges & Features */}
                       <div className="pt-1.5 border-t border-[#221E1B] flex items-center justify-between text-[10px] font-mono text-[#7E756B] flex-wrap gap-1">
                         {block.output || (block as any).outputType ? (
                           <span className="bg-[#1E2522] text-[#82D182] px-1.5 py-0.2 rounded border border-[#2C482C]">

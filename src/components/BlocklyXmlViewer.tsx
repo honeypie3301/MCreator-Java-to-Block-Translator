@@ -22,7 +22,6 @@ export const BlocklyXmlViewer: React.FC<BlocklyXmlViewerProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-[#181614] border border-[#2E2925] rounded-lg overflow-hidden font-mono text-xs shadow-sm">
-      {/* Bar */}
       <div className="bg-[#121110] px-3 py-2 border-b border-[#2E2925] flex items-center justify-between gap-3 min-w-0 flex-wrap sm:flex-nowrap text-xs">
         <div className="flex items-center gap-2 min-w-0 overflow-hidden flex-1">
           <FileCode className="w-4 h-4 text-[#CEB098] shrink-0" />
@@ -58,17 +57,14 @@ export const BlocklyXmlViewer: React.FC<BlocklyXmlViewerProps> = ({
         </div>
       </div>
 
-      {/* Code Container */}
       <div className="flex-1 min-h-0 bg-[#0F0E0D] overflow-hidden flex flex-col relative">
         <div className="flex-1 overflow-auto flex select-text font-mono text-xs leading-5">
-          {/* Synchronized Line Numbers Gutter */}
           <div className="select-none py-3 px-3 text-[#5C554D] bg-[#141210] border-r border-[#24201D] text-right min-w-[3.2rem] font-mono text-[11px] leading-5 shrink-0 sticky left-0 z-10">
             {lines.map((_, i) => (
               <div key={i}>{i + 1}</div>
             ))}
           </div>
 
-          {/* XML Code Body with Syntax Coloring */}
           <pre className="py-3 px-4 text-[#E8D8C8] font-mono text-xs leading-5 whitespace-pre selection:bg-[#CEB098]/30 overflow-visible flex-1">
             <code>
               {lines.map((line, i) => (
@@ -81,7 +77,6 @@ export const BlocklyXmlViewer: React.FC<BlocklyXmlViewerProps> = ({
         </div>
       </div>
 
-      {/* Footer Info */}
       <div className="bg-[#121110] px-3 py-1.5 border-t border-[#2E2925] text-[11px] text-[#A39B8E] flex items-center justify-between gap-2 flex-wrap min-w-0 shrink-0">
         <span className="flex items-center space-x-1 min-w-0">
           <CheckCircle2 className="w-3.5 h-3.5 text-[#CEB098] shrink-0" />
@@ -94,7 +89,6 @@ export const BlocklyXmlViewer: React.FC<BlocklyXmlViewerProps> = ({
 };
 
 function highlightXmlLine(line: string): React.ReactNode {
-  // Simple, safe XML token highlighting for tags, attributes, and text
   const parts: React.ReactNode[] = [];
   const regex = /(<\/?[a-zA-Z0-9_:-]+)|(\s+[a-zA-Z0-9_:-]+=)|("[^"]*")|(\/?>)|([^<]+)/g;
   let match;

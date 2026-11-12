@@ -36,7 +36,6 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
 
   const rafRef = useRef<number | null>(null);
 
-  // Fast zero-allocation line counter for handling large inputs (up to 50,000+ lines)
   const totalLines = useMemo(() => {
     if (!code) return 1;
     let lines = 1;
@@ -49,7 +48,6 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
 
   const charCount = code.length;
 
-  // Track container height for virtualization
   useEffect(() => {
     if (!containerRef.current) return;
     const observer = new ResizeObserver((entries) => {
@@ -61,7 +59,6 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
     return () => observer.disconnect();
   }, []);
 
-  // Synchronize scrolling with RAF throttling for 60fps smooth scrolling
   const handleScroll = useCallback(() => {
     if (textareaRef.current) {
       const top = textareaRef.current.scrollTop;
@@ -90,7 +87,6 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
     }
   };
 
-  // Virtualized line number calculations for handling 100 to 20,000+ lines effortlessly
   const buffer = 15;
   const startLineIdx = Math.max(0, Math.floor(scrollTop / LINE_HEIGHT) - buffer);
   const visibleCount = Math.ceil(viewportHeight / LINE_HEIGHT) + buffer * 2;
@@ -106,7 +102,6 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-[#181614] border border-[#2E2925] rounded-lg overflow-hidden shadow-sm">
-      {/* Top Bar - Compact */}
       <div className="bg-[#121110] px-2.5 py-1.5 border-b border-[#2E2925] flex items-center justify-between gap-2 flex-wrap text-xs">
         <div className="flex items-center space-x-1.5">
           <Code2 className="w-3.5 h-3.5 text-[#CEB098]" />
@@ -117,12 +112,10 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
         </div>
       </div>
 
-      {/* Editor Body with Synchronized Gutter - Compact */}
       <div
         ref={containerRef}
         className="relative flex-1 bg-[#0F0E0D] font-mono text-[11px] flex overflow-hidden select-text"
       >
-        {/* Virtualized Line Numbers Gutter */}
         <div
           ref={lineNumbersRef}
           className="select-none bg-[#141210] border-r border-[#24201D] text-[#5C554D] text-right font-mono text-[10px] overflow-hidden shrink-0 z-10 pointer-events-auto"
@@ -151,7 +144,6 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
           </div>
         </div>
 
-        {/* Java Source Text Area */}
         <div className="relative flex-1 h-full overflow-hidden">
           <textarea
             ref={textareaRef}
@@ -173,7 +165,6 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
         </div>
       </div>
 
-      {/* Error Banner */}
       {error && (
         <div className="bg-[#2A1816] border-t border-[#5C2B25] p-2.5 px-3 flex items-start space-x-2 text-xs text-[#E8A59E]">
           <AlertCircle className="w-4 h-4 shrink-0 text-[#E8A59E] mt-0.5" />
@@ -181,7 +172,6 @@ export const JavaEditorPanel: React.FC<JavaEditorPanelProps> = ({
         </div>
       )}
 
-      {/* Bottom Footer */}
       <div className="bg-[#121110] p-2 sm:p-2.5 border-t border-[#2E2925] flex items-center justify-between gap-2 flex-wrap text-xs">
         <div className="hidden sm:flex items-center space-x-2 text-[11px] text-[#A39B8E] shrink-0">
           <kbd className="px-1.5 py-0.5 bg-[#24201D] border border-[#3B342E] rounded text-[#FAF6F0] font-mono text-[10px]">
