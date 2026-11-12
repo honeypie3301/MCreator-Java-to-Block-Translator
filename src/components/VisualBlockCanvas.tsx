@@ -878,7 +878,7 @@ const BlocklyNodeRenderer: React.FC<{
           <button className="p-0.5 rounded hover:bg-black/20 text-white/90" title="Block Settings">
             <Settings className="w-3 h-3" />
           </button>
-          {node.type !== 'world_entity_inrange_foreach' && (
+          {node.type !== 'world_entity_inrange_foreach' && node.type !== 'wait_ticks' && (
             <span className="font-bold text-[11px] tracking-wide">{node.title || node.type}</span>
           )}
           
@@ -1782,11 +1782,12 @@ const BlocklyNodeRenderer: React.FC<{
     node.type === 'entity_data_integer_set' ||
     node.type === 'entity_data_string_set' ||
     node.type === 'entity_add_potion_advanced' ||
-    node.type === 'entity_set_attribute'
+    node.type === 'entity_set_attribute' ||
+    node.type === 'entity_set_attribute_base_value'
   ) {
     const isEntityData = node.type.startsWith('entity_data_');
     const isPotion = node.type === 'entity_add_potion_advanced';
-    const isAttr = node.type === 'entity_set_attribute';
+    const isAttr = node.type === 'entity_set_attribute' || node.type === 'entity_set_attribute_base_value';
     const entBlock = node.values?.find(v => v.name === 'entity')?.block;
 
     return (
@@ -1861,7 +1862,7 @@ const BlocklyNodeRenderer: React.FC<{
             <>
               <span className="font-bold text-[11px]">Set the base value of attribute</span>
               <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
-                {node.explanation?.replace(/^Set attribute /, '').replace(/ base value to.*$/, '') || node.title?.replace(/^Set attribute /, '') || 'Water movement efficiency'} <ChevronDown className="w-3 h-3 opacity-70" />
+                {node.fields?.attribute || node.explanation?.replace(/^Set attribute /, '').replace(/ base value to.*$/, '') || 'Water movement efficiency'} <ChevronDown className="w-3 h-3 opacity-70" />
               </span>
               <span className="font-bold text-[11px]">to</span>
               {node.values?.find(v => v.name === 'value')?.block && (
@@ -2460,7 +2461,7 @@ const BlocklyNodeRenderer: React.FC<{
 
   // 2.7 Call Procedure Block
   if (node.type === 'call_procedure') {
-    const procName = node.fields?.procedure || 'procedure';
+    const procName = node.fields?.procedure || node.title?.replace(/^Call procedure:\s*/, '') || 'procedure';
     return (
       <div
         ref={nodeRef}
@@ -2472,35 +2473,96 @@ const BlocklyNodeRenderer: React.FC<{
         }`}
       >
         <div
-          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex flex-col gap-1.5 min-w-[280px]"
-          style={{ backgroundColor: theme.headerBg, borderColor: theme.border }}
+          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex items-center gap-1.5 flex-wrap"
+          style={{ backgroundColor: '#815ba5', borderColor: '#5f3d7e' }}
         >
-          <div className="flex items-center justify-between gap-1.5 border-b border-white/20 pb-0.5">
-            <span className="font-bold text-[11px] flex items-center gap-1.5">
-              <span>⚡</span> Call procedure: <span className="font-mono text-yellow-200">{procName}</span>
-            </span>
-            
+          <Settings className="w-3.5 h-3.5 text-white/90" />
+          <span className="font-bold text-[11px]">Call procedure</span>
+          <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
+            {procName} <ChevronDown className="w-3 h-3 opacity-70" />
+          </span>
+        </div>
+
+        {node.next && (
+          <div className="mt-0.5">
+            <BlocklyNodeRenderer
+              node={node.next}
+              selectedLineNumber={selectedLineNumber}
+              selectedBlockId={selectedBlockId}
+              onSelectBlock={onSelectBlock}
+            />
           </div>
-          {node.values && node.values.length > 0 && (
-            <div className="flex flex-col gap-1 pl-1">
-              <span className="text-[10px] text-white/80 font-medium">with dependencies:</span>
-              <div className="flex flex-wrap gap-1 items-center">
-                {node.values.map((v, idx) => (
-                  <div key={idx} className="flex items-center gap-1 bg-black/20 px-1.5 py-0.5 rounded border border-black/20">
-                    <span className="text-white/70 text-[10px]">{v.name}:</span>
-                    {v.block && (
-                      <InlineValueBlock
-                        node={v.block}
-                        selectedLineNumber={selectedLineNumber}
-                        selectedBlockId={selectedBlockId}
-                        onSelectBlock={onSelectBlock}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+        )}
+      </div>
+    );
+  }
+
+  // 2.7.5 Execute Command Block (Multi-line World/Coordinate Execute Command)
+  if (node.type === 'execute_command') {
+    const cmdBlock = node.values?.find(v => v.name === 'command')?.block;
+    const xBlock = node.values?.find(v => v.name === 'x')?.block;
+    const yBlock = node.values?.find(v => v.name === 'y')?.block;
+    const zBlock = node.values?.find(v => v.name === 'z')?.block;
+
+    return (
+      <div
+        ref={nodeRef}
+        onClick={(e) => { e.stopPropagation(); }}
+        className="flex flex-col items-start font-sans my-0.5 select-none cursor-pointer transition-all"
+      >
+        <div
+          className="rounded-md px-2.5 py-1.5 text-white blockly-3d-bevel flex flex-col gap-1 min-w-[320px]"
+          style={{ backgroundColor: '#8a6438', borderColor: '#5e4324' }}
+        >
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-bold text-[11px]">Execute command /</span>
+            {cmdBlock && (
+              <InlineValueBlock
+                node={cmdBlock}
+                inputLayoutMode={inputLayoutMode}
+                selectedLineNumber={selectedLineNumber}
+                selectedBlockId={selectedBlockId}
+                onSelectBlock={onSelectBlock}
+              />
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap pl-2">
+            <span className="font-bold text-[11px]">at x:</span>
+            {xBlock && (
+              <InlineValueBlock
+                node={xBlock}
+                inputLayoutMode={inputLayoutMode}
+                selectedLineNumber={selectedLineNumber}
+                selectedBlockId={selectedBlockId}
+                onSelectBlock={onSelectBlock}
+              />
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap pl-2">
+            <span className="font-bold text-[11px]">y:</span>
+            {yBlock && (
+              <InlineValueBlock
+                node={yBlock}
+                inputLayoutMode={inputLayoutMode}
+                selectedLineNumber={selectedLineNumber}
+                selectedBlockId={selectedBlockId}
+                onSelectBlock={onSelectBlock}
+              />
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap pl-2">
+            <span className="font-bold text-[11px]">z:</span>
+            {zBlock && (
+              <InlineValueBlock
+                node={zBlock}
+                inputLayoutMode={inputLayoutMode}
+                selectedLineNumber={selectedLineNumber}
+                selectedBlockId={selectedBlockId}
+                onSelectBlock={onSelectBlock}
+              />
+            )}
+            <FileText className="w-3.5 h-3.5 ml-auto text-white/80" />
+          </div>
         </div>
 
         {node.next && (

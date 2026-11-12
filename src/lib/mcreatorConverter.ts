@@ -549,6 +549,20 @@ function unwrapMCreatorBoilerplate(text: string): string {
   // if (sourceentity instanceof LivingEntity _entity && !_entity.level().isClientSide()) _entity.addEffect(...)
   s = unwrapGuardedMethod(s, /if\s*\(\s*([a-zA-Z0-9_.]+)\s+instanceof\s+LivingEntity\s+([_a-zA-Z0-9]+)\s*&&\s*!\2\.level\(\)\.isClientSide\(\)\s*\)\s*\{?\s*\2\./, 'addEffect', '$1');
 
+  // -0.28. Unwrap custom entity data parameter setters:
+  // if (entity instanceof LignumGigasEntity _datEntSetL) _datEntSetL.getEntityData().set(...) -> entity.getEntityData().set(...)
+  s = s.replace(
+    /if\s*\(\s*([a-zA-Z0-9_.]+)\s+instanceof\s+([a-zA-Z0-9_]+)\s+([a-zA-Z0-9_]+)\s*\)\s*\{?\s*\3\.getEntityData\(\)\.set\(([\s\S]*?)\);?\s*\}?/g,
+    (_, ent, _class, _alias, args) => `${ent}.getEntityData().set(${args});`
+  );
+
+  // -0.26. Unwrap LivingEntity attribute base value setters:
+  // if (entity instanceof LivingEntity _livingEntity3 && _livingEntity3.getAttributes().hasAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY)) _livingEntity3.getAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY).setBaseValue(1); -> entity.getAttribute(Attributes.WATER_MOVEMENT_EFFICIENCY).setBaseValue(1);
+  s = s.replace(
+    /if\s*\(\s*([a-zA-Z0-9_.]+)\s+instanceof\s+LivingEntity\s+([_a-zA-Z0-9]+)\s*&&\s*\2\.getAttributes\(\)\.hasAttribute\(([^)]+)\)\s*\)\s*\{?\s*\2\.getAttribute\(\3\)\.setBaseValue\(([^)]+)\);?\s*\}?/g,
+    (_, ent, _alias, attr, val) => `${ent}.getAttribute(${attr}).setBaseValue(${val});`
+  );
+
   // -0.2. Unwrap Level playSound / playLocalSound dual client/server guard:
   // if (world instanceof Level _level) { if (!_level.isClientSide()) { ... } else { ... } }
   s = s.replace(
@@ -1993,11 +2007,11 @@ function parseEntitySetAttributeStatement(stmt: string, idSeq: number, breakdown
 
   const formattedAttr = rawAttr === 'GRAVITY' ? 'Entity gravity' : rawAttr.split('_').map((w, idx) => idx === 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase()).join(' ');
 
-  breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `attr_${idSeq}`, mcreatorBlock: 'entity_set_attribute', explanation: `Set attribute ${formattedAttr} base value to ${valExpr}` });
+  breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `attr_${idSeq}`, mcreatorBlock: 'entity_set_attribute_base_value', explanation: `Set attribute ${formattedAttr} base value to ${valExpr}` });
 
   return {
     id: `attr_${idSeq}`,
-    type: 'entity_set_attribute',
+    type: 'entity_set_attribute_base_value',
     category: 'entity',
     title: 'Set the base value of attribute',
     fields: { attribute: formattedAttr },
@@ -2983,35 +2997,48 @@ function parseJavaStatementInternal(
   if (stmt.includes('performPrefixedCommand')) {
     const cmdMatch = stmt.match(/performPrefixedCommand\s*\([^,]+,([\s\S]+?)\);?$/);
     const rawCmd = cmdMatch ? cmdMatch[1].trim() : '"say Hello"';
-    const isEntityCmd = stmt.includes('entity') || stmt.includes('_ent');
-
-    const blockType = isEntityCmd ? 'entity_execute_command' : 'world_execute_command';
-    breakdown.push({ javaLine: stmt, mcreatorBlock: blockType, explanation: 'Execute Minecraft command' });
+    const isEntityCmd = (stmt.includes('.createCommandSourceStack()') || stmt.includes('entity.createCommandSourceStack()')) && !stmt.includes('Vec3');
 
     if (isEntityCmd) {
+      breakdown.push({ javaLine: stmt, mcreatorBlock: 'entity_execute_command', explanation: 'Execute Minecraft command in name of entity' });
       return {
         id: `cmd_${idSeq}`,
-        type: blockType,
+        type: 'entity_execute_command',
         category: 'command',
         title: 'Execute command in name of entity',
         values: [
           { name: 'command', block: parseExpressionToAST(rawCmd, idSeq * 10 + 1) },
           { name: 'entity', block: { id: `ent_${idSeq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' } },
         ],
+        sourceLine: startLine,
+        sourceEndLine: endLine,
       };
     }
 
+    // World / Coordinate-based command: execute_command
+    let xExpr = 'x', yExpr = 'y', zExpr = 'z';
+    const vecMatch = stmt.match(/new\s+Vec3\s*\(\s*([^,]+),\s*([^,]+),\s*([^)]+)\s*\)/);
+    if (vecMatch) {
+      xExpr = vecMatch[1].trim();
+      yExpr = vecMatch[2].trim();
+      zExpr = vecMatch[3].trim();
+    }
+
+    breakdown.push({ javaLine: stmt, mcreatorBlock: 'execute_command', explanation: 'Execute Minecraft command at position' });
+
     return {
       id: `cmd_${idSeq}`,
-      type: blockType,
-      category: 'command',
-      title: 'Execute command in world',
+      type: 'execute_command',
+      category: 'action',
+      title: 'Execute command /',
       values: [
         { name: 'command', block: parseExpressionToAST(rawCmd, idSeq * 10 + 1) },
-        { name: 'x', block: { id: `x_${idSeq}`, type: 'coord_x', category: 'world', title: 'x' } },
-        { name: 'y', block: { id: `y_${idSeq}`, type: 'coord_y', category: 'world', title: 'y' } },
-        { name: 'z', block: { id: `z_${idSeq}`, type: 'coord_z', category: 'world', title: 'z' } },
+        { name: 'x', block: parseExpressionToAST(xExpr, idSeq * 10 + 2) },
+        { name: 'y', block: parseExpressionToAST(yExpr, idSeq * 10 + 3) },
+        { name: 'z', block: parseExpressionToAST(zExpr, idSeq * 10 + 4) },
       ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
     };
   }
 
@@ -4965,6 +4992,17 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     } else {
       break;
     }
+  }
+
+  // 0.00 INFINITY AND MAX NUMBERS
+  if (/^\(?\s*(?:\(int\)|int\s*\))?\s*(?:Double\.POSITIVE_INFINITY|Float\.POSITIVE_INFINITY|Integer\.MAX_VALUE)\s*\)?$/i.test(expr)) {
+    return {
+      id: `math_num_${seq}`,
+      type: 'math_number',
+      category: 'math',
+      title: '∞',
+      fields: { NUM: '∞' },
+    };
   }
 
   // 0.01 COMMAND PARAMETERS
