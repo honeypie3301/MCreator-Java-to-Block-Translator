@@ -544,7 +544,7 @@ function unwrapMCreatorBoilerplate(text: string): string {
   );
 
   s = s.replace(
-    /\(\s*([a-zA-Z0-9_.]+)\s+instanceof\s+[a-zA-Z0-9_.]+\s+([a-zA-Z0-9_]+)\s*\?\s*\2\.((?:[a-zA-Z0-9_.]+(?:\([^()]*\))*)+)\s*:\s*(?:ItemStack\.EMPTY|false|true|-?\d+(?:\.\d+)?f?|null|"[^"]*"|'[^']*')\s*\)/g,
+    /\(\s*([a-zA-Z0-9_.]+)\s+instanceof\s+[a-zA-Z0-9_.]+\s+([a-zA-Z0-9_]+)\s*\?\s*\2\.(getEntityData\(\)\.get\(\s*[^()]*\s*\))\s*:\s*(?:ItemStack\.EMPTY|false|true|-?\d+(?:\.\d+)?f?|null|"[^"]*"|'[^']*')\s*\)/g,
     (_, ent, _alias, call) => `${ent}.${call.trim()}`
   );
 
@@ -4753,6 +4753,26 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
 
   expr = expr.replace(/\s*\n\s*/g, " ");
 
+  // These version-specific server lookups are intentionally kept as one
+  // expression snippet. Letting the generic operator parsers inspect them
+  // first can split Java pattern matching and ternary expressions into
+  // misleading Blockly values.
+  if (
+    expr.includes('instanceof net.minecraft.server.level.ServerLevel') ||
+    /\bServerLevel\s+_slv\b/.test(expr) ||
+    expr.includes('_slv.getServer()') ||
+    expr.includes('.getTickCount()')
+  ) {
+    return {
+      id: `snip_expr_${seq}`,
+      type: 'custom_code_snippet',
+      category: 'code',
+      title: `Custom code snippet: ${rawExpr.trim()}`,
+      fields: { CODE: rawExpr.trim() },
+      isSnippetValue: true,
+    };
+  }
+
   while (expr.startsWith("(") && expr.endsWith(")")) {
     let depth = 0;
     let enclosed = true;
@@ -5191,17 +5211,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
         { name: 'entity', block: targetAST },
         { name: 'item', block: itemAST },
       ],
-    };
-  }
-
-  if (expr.includes('instanceof net.minecraft.server.level.ServerLevel') || expr.includes('ServerLevel _slv') || expr.includes('_slv.getServer()') || expr.includes('.getTickCount()')) {
-    return {
-      id: `snip_expr_${seq}`,
-      type: 'custom_code_snippet',
-      category: 'code',
-      title: `Custom code snippet: ${rawExpr.trim()}`,
-      fields: { CODE: rawExpr.trim() },
-      isSnippetValue: true,
     };
   }
 
