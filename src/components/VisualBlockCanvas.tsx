@@ -805,11 +805,7 @@ const BlocklyNodeRenderer: React.FC<{
               <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
               Event trigger - triggered by external call
             </span>
-            {node.sourceLine && (
-              <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono">
-                L{node.sourceLine}
-              </span>
-            )}
+            
           </div>
           <div className="flex items-center gap-1.5 text-[11px] font-medium pl-1">
             <span className="text-white/90 text-[11px]">or when (global trigger):</span>
@@ -885,11 +881,7 @@ const BlocklyNodeRenderer: React.FC<{
           {node.type !== 'world_entity_inrange_foreach' && (
             <span className="font-bold text-[11px] tracking-wide">{node.title || node.type}</span>
           )}
-          {node.sourceLine && (
-            <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono">
-              L{node.sourceLine}
-            </span>
-          )}
+          
 
           {/* Fields */}
           {node.fields && Object.keys(node.fields).length > 0 && node.type !== 'world_entity_inrange_foreach' && (
@@ -1172,11 +1164,7 @@ const BlocklyNodeRenderer: React.FC<{
               )}
             </>
           )}
-          {node.sourceLine && (
-            <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
-              L{node.sourceLine}
-            </span>
-          )}
+          
         </div>
 
         {node.next && (
@@ -1232,11 +1220,7 @@ const BlocklyNodeRenderer: React.FC<{
             <span className="text-white/70 text-[11px]">Event/target entity</span>
           )}
           <span className="font-bold text-[11px]">if it has inventory</span>
-          {node.sourceLine && (
-            <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
-              L{node.sourceLine}
-            </span>
-          )}
+          
         </div>
 
         {node.next && (
@@ -1634,11 +1618,7 @@ const BlocklyNodeRenderer: React.FC<{
             </>
           )}
 
-          {node.sourceLine && (
-            <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
-              L{node.sourceLine}
-            </span>
-          )}
+          
         </div>
 
         {node.next && (
@@ -1779,11 +1759,7 @@ const BlocklyNodeRenderer: React.FC<{
             </>
           )}
 
-          {node.sourceLine && (
-            <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
-              L{node.sourceLine}
-            </span>
-          )}
+          
         </div>
 
         {node.next && (
@@ -2503,11 +2479,7 @@ const BlocklyNodeRenderer: React.FC<{
             <span className="font-bold text-[11px] flex items-center gap-1.5">
               <span>⚡</span> Call procedure: <span className="font-mono text-yellow-200">{procName}</span>
             </span>
-            {node.sourceLine && (
-              <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono">
-                L{node.sourceLine}
-              </span>
-            )}
+            
           </div>
           {node.values && node.values.length > 0 && (
             <div className="flex flex-col gap-1 pl-1">
@@ -2567,11 +2539,7 @@ const BlocklyNodeRenderer: React.FC<{
           <div className="flex-1 bg-[#37244f] border border-[#261738] rounded p-2 font-mono text-[11px] text-white whitespace-pre-wrap leading-relaxed shadow-inner">
             {node.fields?.CODE || '/* verbatim java statement */'}
           </div>
-          {node.sourceLine && (
-            <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
-              L{node.sourceLine}
-            </span>
-          )}
+          
         </div>
 
         {node.next && (
@@ -2618,11 +2586,7 @@ const BlocklyNodeRenderer: React.FC<{
               onSelectBlock={onSelectBlock}
             />
           )}
-          {node.sourceLine && (
-            <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
-              L{node.sourceLine}
-            </span>
-          )}
+          
         </div>
 
         {node.next && (
@@ -2665,11 +2629,7 @@ const BlocklyNodeRenderer: React.FC<{
               onSelectBlock={onSelectBlock}
             />
           )}
-          {node.sourceLine && (
-            <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
-              L{node.sourceLine}
-            </span>
-          )}
+          
         </div>
 
         {node.next && (
@@ -2707,11 +2667,7 @@ const BlocklyNodeRenderer: React.FC<{
             {flowText} <ChevronDown className="w-3 h-3 opacity-70" />
           </span>
           <span className="font-bold text-[11px]">of loop</span>
-          {node.sourceLine && (
-            <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
-              L{node.sourceLine}
-            </span>
-          )}
+          
         </div>
 
         {node.next && (
@@ -2775,11 +2731,7 @@ const BlocklyNodeRenderer: React.FC<{
               onSelectBlock={onSelectBlock}
             />
           )}
-          {node.sourceLine && (
-            <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
-              L{node.sourceLine}
-            </span>
-          )}
+          
         </div>
 
         {node.next && (
@@ -2880,11 +2832,7 @@ const BlocklyNodeRenderer: React.FC<{
               Event/target entity
             </span>
           )}
-          {node.sourceLine && (
-            <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
-              L{node.sourceLine}
-            </span>
-          )}
+          
         </div>
 
         {node.next && (
@@ -2944,11 +2892,7 @@ const BlocklyNodeRenderer: React.FC<{
           ) : (
             <span className="text-white/40 text-[9px] italic">🧩 &lt;return value&gt;</span>
           )}
-          {node.sourceLine && (
-            <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono ml-auto">
-              L{node.sourceLine}
-            </span>
-          )}
+          
         </div>
 
         {node.next && (
@@ -2993,11 +2937,7 @@ const BlocklyNodeRenderer: React.FC<{
             <span className="text-[9px] px-1 py-0.2 rounded bg-black/30 text-white/90 font-mono">
               {node.category}
             </span>
-            {node.sourceLine && (
-              <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-amber-300 font-mono">
-                L{node.sourceLine}
-              </span>
-            )}
+            
           </div>
         </div>
 

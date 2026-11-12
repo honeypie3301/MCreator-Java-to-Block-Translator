@@ -557,6 +557,12 @@ function unwrapMCreatorBoilerplate(text: string): string {
     "event.setCanceled(true);"
   );
 
+  // -0.05 Unwrap property-transfer block_replace sequence with keep state = true:
+  s = s.replace(
+    /BlockPos\s+([_a-zA-Z0-9]+)\s*=\s*BlockPos\.containing\([^)]+\);?\s*BlockState\s+([_a-zA-Z0-9]+)\s*=\s*([A-Za-z0-9_.]+(?:\.defaultBlockState\(\))?);?\s*BlockState\s+([_a-zA-Z0-9]+)\s*=\s*(?:world|level)\.getBlockState\(\s*\1\s*\);?\s*for\s*\(\s*Property<\?>\s*[_a-zA-Z0-9]+\s*:\s*\4\.getProperties\(\)\s*\)[\s\S]*?(?:world|level)\.setBlock\(\s*\1\s*,\s*\2\s*,\s*3\s*\);?/g,
+    (_, _bp, bs) => `world.setBlock_keepState(${bs});`
+  );
+
   // 0. Unwrap statement-level instanceof defensive type guard wrappers:
   // if (entity instanceof Player _player) _player.causeFoodExhaustion(-1); -> entity.causeFoodExhaustion(-1);
   // if (entity instanceof Player _player) _player.giveExperiencePoints(10); -> entity.giveExperiencePoints(10);
@@ -1055,8 +1061,26 @@ function splitIntoStatements(code: string): string[] {
   return splitStatementsSmart(code);
 }
 
+function extractNewItemStackArg(stmt: string): string | null {
+  const needle = 'new ItemStack(';
+  const itemIdx = stmt.indexOf(needle);
+  if (itemIdx === -1) return null;
+  const after = stmt.substring(itemIdx + needle.length);
+  let depth = 1;
+  for (let i = 0; i < after.length; i++) {
+    if (after[i] === '(') depth++;
+    else if (after[i] === ')') {
+      depth--;
+      if (depth === 0) {
+        return after.substring(0, i).trim();
+      }
+    }
+  }
+  return null;
+}
+
 function formatItemDisplayName(rawItem: string): string {
-  const clean = rawItem.replace(/\.asItem\(\)/g, '').replace(/\.get\(\)/g, '').trim();
+  const clean = rawItem.replace(/\.defaultBlockState\(\)/g, '').replace(/\.asItem\(\)/g, '').replace(/\.get\(\)/g, '').trim();
   const parts = clean.split('.');
   const last = parts[parts.length - 1];
   return last
@@ -1067,7 +1091,7 @@ function formatItemDisplayName(rawItem: string): string {
 }
 
 function formatItemFieldValue(rawItem: string): string {
-  const clean = rawItem.replace(/\.asItem\(\)/g, '').replace(/\.get\(\)/g, '').trim();
+  const clean = rawItem.replace(/\.defaultBlockState\(\)/g, '').replace(/\.asItem\(\)/g, '').replace(/\.get\(\)/g, '').trim();
   if (clean.startsWith('Blocks.') || clean.startsWith('Items.')) {
     return clean;
   }
@@ -1227,6 +1251,9 @@ function parseEntityRemoveItemStatement(
 
 function isEntityAddItem(stmt: string): boolean {
   const s = stmt.trim();
+  if (s.startsWith('if') && (s.includes('world.setBlock') || s.includes('world.setBlockAndUpdate') || s.includes('getProperties()') || s.includes('for (') || s.includes('for('))) {
+    return false;
+  }
   return (
     s.includes('giveItemToPlayer(') ||
     s.includes('placeItemBackInInventory(') ||
@@ -1263,9 +1290,8 @@ function parseEntityAddItemStatement(
     fields: { value: 'Items.BOWL' },
   };
 
-  const newStackMatch = stmt.match(/new\s+ItemStack\s*\(\s*([^)]+)\)/);
-  if (newStackMatch) {
-    const rawItemExpr = newStackMatch[1].trim();
+  const rawItemExpr = extractNewItemStackArg(stmt);
+  if (rawItemExpr) {
     const title = formatItemDisplayName(rawItemExpr);
     const val = formatItemFieldValue(rawItemExpr);
     itemNode = {
@@ -2711,8 +2737,20 @@ function parseJavaStatementInternal(
     }
 
     // Default: Entity NBT
-    const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)\./);
-    const target = targetMatch ? targetMatch[1] : 'entity';
+    let target = 'entity';
+    const gpdIdx = stmt.indexOf('.getPersistentData()');
+    const gcdIdx = stmt.indexOf('.getCustomData()');
+    const dataIdx = gpdIdx !== -1 ? gpdIdx : gcdIdx;
+    if (dataIdx !== -1) {
+      let rawT = stmt.substring(0, dataIdx).trim();
+      while (rawT.startsWith('(') && rawT.endsWith(')')) {
+        rawT = rawT.slice(1, -1).trim();
+      }
+      target = rawT || 'entity';
+    } else {
+      const altMatch = stmt.match(/^([a-zA-Z0-9_]+)\./);
+      if (altMatch) target = altMatch[1];
+    }
     const entityAST = parseExpressionToAST(target, idSeq * 10);
     if (isRemove) {
       breakdown.push({ javaLine: stmt, mcreatorBlock: 'entity_nbt_tag_remove', explanation: 'Remove NBT tag from entity' });
@@ -3070,6 +3108,36 @@ function parseJavaStatementInternal(
         { name: 'y', block: { id: `y_${idSeq}`, type: 'coord_y', category: 'world', title: 'y' } },
         { name: 'z', block: { id: `z_${idSeq}`, type: 'coord_z', category: 'world', title: 'z' } },
       ],
+    };
+  }
+
+  // 12.4 BLOCK REPLACE KEEP STATE: world.setBlock_keepState(...)
+  if (stmt.includes('world.setBlock_keepState') || stmt.includes('.setBlock_keepState(')) {
+    const blockMatch = stmt.match(/([A-Za-z0-9_]+ModBlocks|[A-Za-z0-9_]+Blocks|Blocks)\.([A-Za-z0-9_]+)/);
+    const rawBlock = blockMatch ? (blockMatch[1] === 'Blocks' ? `Blocks.${blockMatch[2]}` : blockMatch[2]) : 'Blocks.FLOWER_POT';
+    const cleanName = formatItemFieldValue(rawBlock);
+    const displayName = formatItemDisplayName(rawBlock);
+    breakdown.push({
+      javaLine: stmt,
+      lineNumber: startLine,
+      blockId: `blk_rep_${idSeq}`,
+      mcreatorBlock: 'block_replace',
+      explanation: `Replace block at position with ${displayName} (keep state: true)`,
+    });
+    return {
+      id: `blk_rep_${idSeq}`,
+      type: 'block_replace',
+      category: 'block',
+      title: 'Replace block at',
+      fields: { state: 'TRUE', nbt: 'FALSE' },
+      values: [
+        { name: 'x', block: { id: `x_${idSeq}`, type: 'coord_x', category: 'world', title: 'x' } },
+        { name: 'y', block: { id: `y_${idSeq}`, type: 'coord_y', category: 'world', title: 'y' } },
+        { name: 'z', block: { id: `z_${idSeq}`, type: 'coord_z', category: 'world', title: 'z' } },
+        { name: 'block', block: { id: `mcitem_${idSeq}`, type: 'mcitem_all', category: 'item', title: displayName, fields: { value: cleanName } } },
+      ],
+      sourceLine: startLine,
+      sourceEndLine: endLine,
     };
   }
 
@@ -4841,6 +4909,126 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
     } else {
       break;
     }
+  }
+
+  // 0.01 COMMAND PARAMETERS
+  // 1. Number argument: DoubleArgumentType, FloatArgumentType, IntegerArgumentType, LongArgumentType, commandParameterNumber
+  const cmdNumMatch = expr.match(/(?:Double|Float|Integer|Long)ArgumentType\.get(?:Double|Float|Integer|Long)\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)|commandParameterNumber\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)/);
+  if (cmdNumMatch) {
+    const paramVal = cmdNumMatch[1] || cmdNumMatch[2];
+    return {
+      id: `cmd_param_num_${seq}`,
+      type: 'get_command_parameter_number',
+      category: 'command',
+      title: 'Get command number parameter',
+      fields: { param: paramVal },
+    };
+  }
+
+  // 2. Logic (boolean) argument: BoolArgumentType.getBool, commandParameterLogic
+  const cmdBoolMatch = expr.match(/BoolArgumentType\.getBool\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)|commandParameterLogic\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)/);
+  if (cmdBoolMatch) {
+    const paramVal = cmdBoolMatch[1] || cmdBoolMatch[2];
+    return {
+      id: `cmd_param_logic_${seq}`,
+      type: 'get_command_parameter_logic',
+      category: 'command',
+      title: 'Get command logic parameter',
+      fields: { param: paramVal },
+    };
+  }
+
+  // 3. String / Text / Message argument: StringArgumentType.getString, MessageArgument.getMessage, commandParameterString, commandParameterMessage
+  const cmdStrMatch = expr.match(/(?:StringArgumentType\.getString|MessageArgument\.getMessage|commandParameterString|commandParameterMessage)\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)/);
+  if (cmdStrMatch) {
+    const paramVal = cmdStrMatch[1];
+    return {
+      id: `cmd_param_str_${seq}`,
+      type: 'get_command_parameter_string',
+      category: 'command',
+      title: 'Get command text parameter',
+      fields: { param: paramVal },
+    };
+  }
+
+  // 4. Entity argument: EntityArgument.getEntity, commandParameterEntity
+  const cmdEntMatch = expr.match(/(?:EntityArgument\.getEntity|commandParameterEntity)\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)/);
+  if (cmdEntMatch) {
+    const paramVal = cmdEntMatch[1];
+    return {
+      id: `cmd_param_ent_${seq}`,
+      type: 'get_command_parameter_entity',
+      category: 'command',
+      title: 'Get command entity parameter',
+      fields: { param: paramVal },
+    };
+  }
+
+  // 5. BlockPos x, y, z components: commandParameterBlockPos(arguments, "NAME").getX() / .getY() / .getZ()
+  const cmdPosCompMatch = expr.match(/(?:commandParameterBlockPos|BlockPosArgument\.getLoadedBlockPos|BlockPosArgument\.getBlockPos)\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)\s*\.(getX|getY|getZ)\s*\(\s*\)/);
+  if (cmdPosCompMatch) {
+    const paramVal = cmdPosCompMatch[1];
+    const comp = cmdPosCompMatch[2].toLowerCase();
+    const axis = comp.endsWith('x') ? 'x' : comp.endsWith('y') ? 'y' : 'z';
+    return {
+      id: `cmd_param_pos_${axis}_${seq}`,
+      type: `get_command_parameter_blockpos_${axis}`,
+      category: 'command',
+      title: `Get command blockpos ${axis} parameter`,
+      fields: { param: paramVal },
+    };
+  }
+
+  // 6. BlockPos argument: BlockPosArgument.getLoadedBlockPos, BlockPosArgument.getBlockPos, commandParameterBlockPos
+  const cmdPosMatch = expr.match(/(?:BlockPosArgument\.(?:getLoadedBlockPos|getBlockPos)|commandParameterBlockPos)\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)/);
+  if (cmdPosMatch) {
+    const paramVal = cmdPosMatch[1];
+    return {
+      id: `cmd_param_pos_${seq}`,
+      type: 'get_command_parameter_blockpos',
+      category: 'command',
+      title: 'Get command block pos parameter',
+      fields: { param: paramVal },
+    };
+  }
+
+  // 7. BlockState argument: BlockStateArgument.getBlock, commandParameterBlockState
+  const cmdBsMatch = expr.match(/(?:BlockStateArgument\.getBlock|commandParameterBlockState)\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)/);
+  if (cmdBsMatch) {
+    const paramVal = cmdBsMatch[1];
+    return {
+      id: `cmd_param_bs_${seq}`,
+      type: 'get_command_parameter_blockstate',
+      category: 'command',
+      title: 'Get command blockstate parameter',
+      fields: { param: paramVal },
+    };
+  }
+
+  // 8. ItemStack / Item argument: ItemArgument.getItem, commandParameterItemStack
+  const cmdItemMatch = expr.match(/(?:ItemArgument\.getItem|commandParameterItemStack)\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)/);
+  if (cmdItemMatch) {
+    const paramVal = cmdItemMatch[1];
+    return {
+      id: `cmd_param_item_${seq}`,
+      type: 'get_command_parameter_itemstack',
+      category: 'command',
+      title: 'Get command itemstack parameter',
+      fields: { param: paramVal },
+    };
+  }
+
+  // 9. Resource Location / Identifier argument
+  const cmdResMatch = expr.match(/(?:ResourceLocationArgument|IdentifierArgument)\.(?:getId|getResourceLocation)\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)|commandParameterResourceLocation\s*\(\s*arguments\s*,\s*["']([^"']+)["']\s*\)/);
+  if (cmdResMatch) {
+    const paramVal = cmdResMatch[1] || cmdResMatch[2];
+    return {
+      id: `cmd_param_res_${seq}`,
+      type: 'get_command_parameter_resource_location',
+      category: 'command',
+      title: 'Get command resource location parameter',
+      fields: { param: paramVal },
+    };
   }
 
   // 0.05 ITEM TAG CHECK (compare_mcitems_oredictionary)
