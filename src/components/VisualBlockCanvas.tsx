@@ -4820,7 +4820,7 @@ const InlineValueBlock: React.FC<{
     const isBlockNbt = node.type.startsWith('block_nbt_');
     const isItemNbt = node.type.startsWith('item_nbt_');
     const isCustomNbt = node.type.startsWith('custom_nbt_');
-    const typeLabel = node.type.includes('_num_') ? 'number' : node.type.includes('_logic_') ? 'logic' : node.type.includes('_text_') ? 'text' : node.type.includes('_compound_') ? 'compound' : 'tag';
+    const typeLabel = node.type.includes('_num_') ? 'number' : node.type.includes('_logic_') ? 'logic' : node.type.includes('_text_') ? 'text' : node.type.includes('_itemstack_') ? 'itemstack' : node.type.includes('_compound_') ? 'compound' : 'tag';
 
     if (isCreate) {
       return (
@@ -5283,6 +5283,203 @@ const InlineValueBlock: React.FC<{
     );
   }
 
+  // Player / Entity Walk & Fly Speed Getters
+  if (node.type === 'entity_get_fly_speed' || node.type === 'entity_get_walk_speed') {
+    const entBlock = node.values?.find(v => v.name === 'entity')?.block;
+    const isFly = node.type === 'entity_get_fly_speed';
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); }}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: '#00acc1', borderColor: '#006064' }}
+      >
+        <span>Get base {isFly ? 'fly' : 'walk'} speed parameter of</span>
+        {entBlock ? (
+          <InlineValueBlock
+            node={entBlock}
+            inputLayoutMode={inputLayoutMode}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        ) : (
+          <span className="bg-[#006064] text-white/90 px-1.5 py-0.2 rounded text-[10px]">Event/target entity</span>
+        )}
+      </div>
+    );
+  }
+
+  // World execute command: Execute command / [command] at x: [x] y: [y] z: [z]
+  if (node.type === 'execute_command') {
+    const cmdBlock = node.values?.find(v => v.name === 'command')?.block;
+    const xBlock = node.values?.find(v => v.name === 'x')?.block;
+    const yBlock = node.values?.find(v => v.name === 'y')?.block;
+    const zBlock = node.values?.find(v => v.name === 'z')?.block;
+
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); }}
+        className="px-2 py-1 rounded text-white font-sans text-[11px] flex items-center gap-1.5 flex-wrap shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: '#8a6438', borderColor: '#5e4324' }}
+      >
+        <span className="font-semibold text-white/90">Execute command /</span>
+        {cmdBlock && (
+          <InlineValueBlock
+            node={cmdBlock}
+            inputLayoutMode={inputLayoutMode}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        )}
+        <span className="font-semibold text-white/90">at x:</span>
+        {xBlock && (
+          <InlineValueBlock
+            node={xBlock}
+            inputLayoutMode={inputLayoutMode}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        )}
+        <span className="font-semibold text-white/90">y:</span>
+        {yBlock && (
+          <InlineValueBlock
+            node={yBlock}
+            inputLayoutMode={inputLayoutMode}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        )}
+        <span className="font-semibold text-white/90">z:</span>
+        {zBlock && (
+          <InlineValueBlock
+            node={zBlock}
+            inputLayoutMode={inputLayoutMode}
+            selectedLineNumber={selectedLineNumber}
+            selectedBlockId={selectedBlockId}
+            onSelectBlock={onSelectBlock}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // Command Parameters Getter Blocks (e.g. get_command_parameter_number, get_command_parameter_string, get_command_parameter_logic, etc.)
+  if (
+    node.type.startsWith('get_command_parameter_') ||
+    node.category === 'command_param' ||
+    (node as any).toolbox === 'Command parameters' ||
+    (node.fields && ('param' in node.fields || 'name' in node.fields))
+  ) {
+    const paramVal = String(node.fields?.param || node.fields?.name || node.fields?.index || node.fields?.VAR || 'name');
+    const cmdThemeBg = '#815ba5';
+    const cmdThemeBorder = '#4e3568';
+
+    if (node.type === 'get_command_parameter_accept_all') {
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: cmdThemeBg, borderColor: cmdThemeBorder }}
+        >
+          <span>Get accept-all command parameter with index</span>
+          <span className="font-mono bg-white/95 text-[#14171d] font-bold px-1.5 py-0.2 rounded text-[10.5px] shadow-xs">
+            {paramVal}
+          </span>
+          <span>as string</span>
+        </div>
+      );
+    }
+
+    if (node.type === 'get_command_parameter_resource_location') {
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: cmdThemeBg, borderColor: cmdThemeBorder }}
+        >
+          <span>Get resource location parameter</span>
+          <span className="font-mono bg-white/95 text-[#14171d] font-bold px-1.5 py-0.2 rounded text-[10.5px] shadow-xs">
+            {paramVal}
+          </span>
+          <span>as a string</span>
+        </div>
+      );
+    }
+
+    if (node.type.includes('_pos_x') || node.type.includes('_blockpos_x')) {
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: cmdThemeBg, borderColor: cmdThemeBorder }}
+        >
+          <span>X position of command block position parameter</span>
+          <span className="font-mono bg-white/95 text-[#14171d] font-bold px-1.5 py-0.2 rounded text-[10.5px] shadow-xs">
+            {paramVal}
+          </span>
+        </div>
+      );
+    }
+
+    if (node.type.includes('_pos_y') || node.type.includes('_blockpos_y')) {
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: cmdThemeBg, borderColor: cmdThemeBorder }}
+        >
+          <span>Y position of command block position parameter</span>
+          <span className="font-mono bg-white/95 text-[#14171d] font-bold px-1.5 py-0.2 rounded text-[10.5px] shadow-xs">
+            {paramVal}
+          </span>
+        </div>
+      );
+    }
+
+    if (node.type.includes('_pos_z') || node.type.includes('_blockpos_z')) {
+      return (
+        <div
+          onClick={(e) => { e.stopPropagation(); }}
+          className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+          style={{ backgroundColor: cmdThemeBg, borderColor: cmdThemeBorder }}
+        >
+          <span>Z position of command block position parameter</span>
+          <span className="font-mono bg-white/95 text-[#14171d] font-bold px-1.5 py-0.2 rounded text-[10.5px] shadow-xs">
+            {paramVal}
+          </span>
+        </div>
+      );
+    }
+
+    // Standard Command Parameter Blocks (Get command number parameter, Get command string parameter, etc.)
+    const titleText = node.title || (
+      node.type === 'get_command_parameter_number' ? 'Get command number parameter' :
+      node.type === 'get_command_parameter_string' ? 'Get command string parameter' :
+      node.type === 'get_command_parameter_logic' ? 'Get command logic parameter' :
+      node.type === 'get_command_parameter_block' ? 'Get command block parameter' :
+      node.type === 'get_command_parameter_item' ? 'Get command item parameter' :
+      node.type === 'get_command_parameter_message' ? 'Get command message parameter' :
+      node.type === 'get_command_parameter_entity' ? 'Get command entity parameter' :
+      'Get command parameter'
+    );
+
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); }}
+        className="px-2 py-0.5 rounded text-white font-sans text-[11px] flex items-center gap-1.5 shadow-xs border cursor-pointer shrink-0"
+        style={{ backgroundColor: cmdThemeBg, borderColor: cmdThemeBorder }}
+      >
+        <span>{titleText}</span>
+        <span className="font-mono bg-white/95 text-[#14171d] font-bold px-1.5 py-0.2 rounded text-[10.5px] shadow-xs">
+          {paramVal}
+        </span>
+      </div>
+    );
+  }
+
   // Default Value Pill / Getter Block
   return (
     <div
@@ -5300,6 +5497,21 @@ const InlineValueBlock: React.FC<{
       <span className="font-medium text-[11px]">{node.title}</span>
 
       {/* Fields */}
+      {node.fields?.param && (
+        <span className="font-mono font-bold bg-white/95 text-[#14171d] px-1.5 py-0.2 rounded text-[10px] shadow-xs">
+          {node.fields.param}
+        </span>
+      )}
+      {node.fields?.name && (
+        <span className="font-mono font-bold bg-white/95 text-[#14171d] px-1.5 py-0.2 rounded text-[10px] shadow-xs">
+          {node.fields.name}
+        </span>
+      )}
+      {node.fields?.index !== undefined && (
+        <span className="font-mono font-bold bg-white/95 text-[#14171d] px-1.5 py-0.2 rounded text-[10px] shadow-xs">
+          {node.fields.index}
+        </span>
+      )}
       {node.fields?.VAR && (
         <span className="font-mono font-bold bg-black/30 px-1 py-0.2 rounded text-purple-200 text-[10px]">
           {node.fields.VAR.replace('local:', '')}

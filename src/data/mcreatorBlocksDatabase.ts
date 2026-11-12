@@ -7904,8 +7904,9 @@ const CHUNK_2: BlockDefinition[] = [
   {
     id: 'entity_get_fly_speed',
     mcreatorType: 'entity_get_fly_speed',
-    category: 'action',
-    title: 'Entity get fly speed',
+    category: 'player',
+    title: 'Get base fly speed parameter of',
+    label: 'Get base fly speed parameter of [entity]',
     description: 'MCreator core procedure block (entity_get_fly_speed) from plugins/mcreator-core/procedures/entity_get_fly_speed.json',
     supportedElements: ['procedure', 'command', 'feature'],
     fields: [],
@@ -8176,8 +8177,9 @@ const CHUNK_2: BlockDefinition[] = [
   {
     id: 'entity_get_walk_speed',
     mcreatorType: 'entity_get_walk_speed',
-    category: 'action',
-    title: 'Entity get walk speed',
+    category: 'player',
+    title: 'Get base walk speed parameter of',
+    label: 'Get base walk speed parameter of [entity]',
     description: 'MCreator core procedure block (entity_get_walk_speed) from plugins/mcreator-core/procedures/entity_get_walk_speed.json',
     supportedElements: ['procedure', 'command', 'feature'],
     fields: [],

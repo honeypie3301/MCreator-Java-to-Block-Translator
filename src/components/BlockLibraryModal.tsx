@@ -424,7 +424,7 @@ export const BlockLibraryModal: React.FC<BlockLibraryModalProps> = ({ isOpen, on
                         </div>
 
                         <h3 className="font-bold text-xs text-[#FAF6F0] tracking-tight line-clamp-1">
-                          {block.title || block.label || block.mcreatorType || block.id}
+                          {block.label || block.title || block.mcreatorType || block.id}
                         </h3>
 
                         {block.description && (

@@ -113,6 +113,7 @@ export interface BlockASTNode {
 export interface DetectedMethod {
   name: string;
   signature: string;
+  returnType?: string;
   body: string;
   isMainProcedure: boolean;
   eventTrigger?: string;

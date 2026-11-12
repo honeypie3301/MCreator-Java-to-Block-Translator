@@ -464,13 +464,14 @@ export interface StatementWithLocation {
 function unwrapGuardedMethod(code: string, guardPattern: RegExp, methodName: string, targetOverride?: string): string {
   let res = code;
   let idx = 0;
-  while (true) {
+  let loopCount = 0;
+  while (loopCount++ < 200) {
     const match = res.substring(idx).match(guardPattern);
     if (!match) break;
     const matchStart = idx + (match.index || 0);
     const mIdx = res.indexOf(methodName + '(', matchStart);
     if (mIdx === -1 || mIdx > matchStart + 150) {
-      idx = matchStart + 10;
+      idx = matchStart + Math.max(1, match[0].length);
       continue;
     }
     const openParen = res.indexOf('(', mIdx);
@@ -483,7 +484,7 @@ function unwrapGuardedMethod(code: string, guardPattern: RegExp, methodName: str
         if (depth === 0) { closeParen = i; break; }
       }
     }
-    if (closeParen === -1) { idx = mIdx + 1; continue; }
+    if (closeParen === -1) { idx = Math.max(idx + 1, mIdx + 1); continue; }
     let endOfStmt = closeParen + 1;
     while (endOfStmt < res.length && /[\s;}]/.test(res[endOfStmt])) {
       if (res[endOfStmt] === ';') { endOfStmt++; break; }
@@ -536,9 +537,13 @@ function unwrapMCreatorBoilerplate(text: string): string {
     }
   );
 
-  // -0.4. Unwrap ServerLevel sendParticles guard with balanced parentheses:
+  // -0.4. Unwrap ServerLevel sendParticles & performPrefixedCommand guards:
   // if (world instanceof ServerLevel _level) _level.sendParticles(...)
   s = unwrapGuardedMethod(s, /if\s*\(\s*(?:world|level)\s+instanceof\s+ServerLevel\s+([_a-zA-Z0-9]+)\s*\)\s*\{?\s*\1\./, 'sendParticles', '_level');
+  s = s.replace(
+    /if\s*\(\s*(?:world|level|_level)\s+instanceof\s+ServerLevel\s+([_a-zA-Z0-9]+)\s*\)\s*\{?\s*\1\.getServer\(\)\.getCommands\(\)\.performPrefixedCommand\(([\s\S]*?)\);?\s*\}?/g,
+    (_, _lvl, args) => `performPrefixedCommand(${args});`
+  );
 
   // -0.3. Unwrap LivingEntity addEffect potion guard with balanced parentheses:
   // if (sourceentity instanceof LivingEntity _entity && !_entity.level().isClientSide()) _entity.addEffect(...)
@@ -763,10 +768,11 @@ export function extractClassMethods(code: string): DetectedMethod[] {
       if (ch === '{') {
         if (depth === 0) {
           const header = headerBuffer.trim();
-          const methodMatch = header.match(/(?:@SubscribeEvent\s+)?(?:public|private|protected)?\s*(?:static\s+)?(?:final\s+)?(?:void|[a-zA-Z0-9_<>[\]]+)\s+([a-zA-Z0-9_]+)\s*\(([\s\S]*?)\)$/);
+          const methodMatch = header.match(/(?:@SubscribeEvent\s+)?(?:public|private|protected)?\s*(?:static\s+)?(?:final\s+)?(void|[a-zA-Z0-9_<>[\]]+)\s+([a-zA-Z0-9_]+)\s*\(([\s\S]*?)\)$/);
           if (methodMatch) {
-            const mName = methodMatch[1];
-            const mParams = methodMatch[2].trim();
+            const mReturnType = methodMatch[1].trim();
+            const mName = methodMatch[2];
+            const mParams = methodMatch[3].trim();
             let eventTrigger: string | undefined;
             if (header.includes("RightClickBlock") || mName === "onRightClickBlock") {
               eventTrigger = "player_right_click_block";
@@ -891,6 +897,7 @@ export function extractClassMethods(code: string): DetectedMethod[] {
               name: mName,
               signature: `${mName}(${mParams})`,
               params: mParams,
+              returnType: mReturnType,
               header: methodMatch[0].trim(),
               bodyStart: i + 1,
               startLine,
@@ -4820,7 +4827,8 @@ function parseAIGoalStatement(
 function parseReturnStatement(
   stmt: string,
   idSeq: number,
-  breakdown: { javaLine: string; mcreatorBlock: string; explanation: string }[]
+  breakdown: { javaLine: string; mcreatorBlock: string; explanation: string }[],
+  expectedReturnType?: string
 ): BlockASTNode {
   const retValStr = stmt.replace(/^return\s*/, '').replace(/;$/, '').trim();
 
@@ -4838,21 +4846,53 @@ function parseReturnStatement(
   let retvalType = 'return_logic';
   let title = 'Return logic:';
 
-  if (retValStr === 'true' || retValStr === 'false') {
-    retvalType = 'return_logic';
-    title = 'Return logic:';
-  } else if (!isNaN(Number(retValStr))) {
+  const isNumericExpr = (
+    !isNaN(Number(retValStr)) ||
+    /\.(?:getDouble|getInt|getFloat|getByte|getShort|getLong|size|length)\s*\(/.test(retValStr) ||
+    /Math\.(?:abs|max|min|floor|ceil|round|sqrt|pow|sin|cos|tan)\b/.test(retValStr) ||
+    (expectedReturnType && /^(?:double|float|int|long|byte|short|number)$/i.test(expectedReturnType))
+  );
+
+  const isLogicExpr = (
+    retValStr === 'true' || retValStr === 'false' ||
+    /\.(?:getBoolean|contains|isEmpty|isPresent|isClientSide|isAlive)\s*\(/.test(retValStr) ||
+    /==|!=|<=|>=|<|>|&&|\|\||!/.test(retValStr) ||
+    (expectedReturnType && /^(?:boolean|logic)$/i.test(expectedReturnType))
+  );
+
+  const isStringExpr = (
+    retValStr.startsWith('"') ||
+    /\.getString\s*\(/.test(retValStr) ||
+    (expectedReturnType && /^(?:string|text)$/i.test(expectedReturnType))
+  );
+
+  if (isNumericExpr) {
     retvalType = 'return_number';
     title = 'Return number:';
-  } else if (retValStr.startsWith('"')) {
+  } else if (isLogicExpr) {
+    retvalType = 'return_logic';
+    title = 'Return logic:';
+  } else if (isStringExpr) {
     retvalType = 'return_string';
     title = 'Return text:';
-  } else if (retValStr.includes('entity') || retValStr.includes('player') || retValStr.includes('_ent')) {
-    retvalType = 'return_entity';
-    title = 'Return entity:';
-  } else if (retValStr.includes('itemstack') || retValStr.includes('ItemStack')) {
+  } else if (expectedReturnType && /^(?:itemstack)$/i.test(expectedReturnType)) {
     retvalType = 'return_itemstack';
     title = 'Return itemstack:';
+  } else if (expectedReturnType && /^(?:entity)$/i.test(expectedReturnType)) {
+    retvalType = 'return_entity';
+    title = 'Return entity:';
+  } else if (expectedReturnType && /^(?:vec3|vector)$/i.test(expectedReturnType)) {
+    retvalType = 'return_vector';
+    title = 'Return vector:';
+  } else if (expectedReturnType && /^(?:direction)$/i.test(expectedReturnType)) {
+    retvalType = 'return_direction';
+    title = 'Return direction:';
+  } else if (expectedReturnType && /^(?:blockstate)$/i.test(expectedReturnType)) {
+    retvalType = 'return_blockstate';
+    title = 'Return blockstate:';
+  } else if (expectedReturnType && /^(?:damagesource)$/i.test(expectedReturnType)) {
+    retvalType = 'return_damagesource';
+    title = 'Return damage source:';
   } else if (retValStr.includes('blockstate') || retValStr.includes('defaultBlockState()')) {
     retvalType = 'return_blockstate';
     title = 'Return blockstate:';
@@ -4868,6 +4908,12 @@ function parseReturnStatement(
   } else if (retValStr.includes('InteractionResult') || retValStr.includes('SUCCESS') || retValStr.includes('PASS')) {
     retvalType = 'return_actionresulttype';
     title = 'Return action result:';
+  } else if (retValStr.includes('itemstack') || retValStr.includes('ItemStack')) {
+    retvalType = 'return_itemstack';
+    title = 'Return itemstack:';
+  } else if (retValStr.includes('entity') || retValStr.includes('player') || retValStr.includes('_ent')) {
+    retvalType = 'return_entity';
+    title = 'Return entity:';
   }
 
   const retAST = parseExpressionToAST(retValStr || 'true', idSeq * 10);
@@ -4885,7 +4931,17 @@ function parseReturnStatement(
 /*                     Recursive Expression Parser to AST                     */
 /* -------------------------------------------------------------------------- */
 
-export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode {
+export function parseExpressionToAST(rawExpr: string, seq: number, depth: number = 0): BlockASTNode {
+  if (depth > 40 || !rawExpr || !rawExpr.trim()) {
+    return {
+      id: `snip_expr_${seq}`,
+      type: 'custom_code_snippet',
+      category: 'code',
+      title: 'Custom code snippet',
+      fields: { CODE: rawExpr || '' },
+      isSnippetValue: true,
+    };
+  }
   rawExpr = unwrapMCreatorBoilerplate(rawExpr);
   let expr = rawExpr.trim();
   if (expr.endsWith(";")) expr = expr.slice(0, -1).trim();
@@ -4921,7 +4977,7 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
       type: 'get_command_parameter_number',
       category: 'command',
       title: 'Get command number parameter',
-      fields: { param: paramVal },
+      fields: { param: paramVal, name: paramVal },
     };
   }
 
@@ -4934,7 +4990,7 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
       type: 'get_command_parameter_logic',
       category: 'command',
       title: 'Get command logic parameter',
-      fields: { param: paramVal },
+      fields: { param: paramVal, name: paramVal },
     };
   }
 
@@ -4947,7 +5003,7 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
       type: 'get_command_parameter_string',
       category: 'command',
       title: 'Get command text parameter',
-      fields: { param: paramVal },
+      fields: { param: paramVal, name: paramVal },
     };
   }
 
@@ -4960,7 +5016,7 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
       type: 'get_command_parameter_entity',
       category: 'command',
       title: 'Get command entity parameter',
-      fields: { param: paramVal },
+      fields: { param: paramVal, name: paramVal },
     };
   }
 
@@ -4975,7 +5031,7 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
       type: `get_command_parameter_blockpos_${axis}`,
       category: 'command',
       title: `Get command blockpos ${axis} parameter`,
-      fields: { param: paramVal },
+      fields: { param: paramVal, name: paramVal },
     };
   }
 
@@ -4988,7 +5044,7 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
       type: 'get_command_parameter_blockpos',
       category: 'command',
       title: 'Get command block pos parameter',
-      fields: { param: paramVal },
+      fields: { param: paramVal, name: paramVal },
     };
   }
 
@@ -5001,7 +5057,7 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
       type: 'get_command_parameter_blockstate',
       category: 'command',
       title: 'Get command blockstate parameter',
-      fields: { param: paramVal },
+      fields: { param: paramVal, name: paramVal },
     };
   }
 
@@ -5014,7 +5070,7 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
       type: 'get_command_parameter_itemstack',
       category: 'command',
       title: 'Get command itemstack parameter',
-      fields: { param: paramVal },
+      fields: { param: paramVal, name: paramVal },
     };
   }
 
@@ -5027,7 +5083,7 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
       type: 'get_command_parameter_resource_location',
       category: 'command',
       title: 'Get command resource location parameter',
-      fields: { param: paramVal },
+      fields: { param: paramVal, name: paramVal },
     };
   }
 
@@ -5937,6 +5993,16 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
         { name: 'az', block: parseExpressionToAST(az, seq * 10 + 3) },
         { name: 'shooter', block: (shooter === 'entity' || shooter === '_entity') ? { id: `ent_dep_${seq}`, type: 'entity_from_deps', category: 'entity', title: 'Event/target entity' } : parseExpressionToAST(shooter, seq * 10 + 4) },
       ],
+    };
+  }
+
+  // World game time in ticks (world_data_current_time)
+  if (expr.includes('.getLevelData().getGameTime()') || expr.includes('.getGameTime()') || expr.includes('.getDayTime()') || expr.includes('dayTime()')) {
+    return {
+      id: `world_time_${seq}`,
+      type: 'world_data_current_time',
+      category: 'world',
+      title: 'World game time in ticks',
     };
   }
 
@@ -7621,13 +7687,21 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
     return { id: `z_${seq}`, type: 'coord_z', category: 'world', title: 'z' };
   }
 
-  // ITEMSTACK ITERATOR IDENTIFIER
-  if (expr === 'itemstackiterator' || expr === 'itemstack') {
+  // ITEMSTACK ITERATOR & PROVIDED ITEMSTACK IDENTIFIERS
+  if (expr === 'itemstackiterator') {
     return {
       id: `iter_${seq}`,
       type: 'itemstack_iterator',
       category: 'gui',
       title: 'Itemstack iterator',
+    };
+  }
+  if (expr === 'itemstack' || expr === 'provided_itemstack' || expr === '_itemstack' || expr === 'item') {
+    return {
+      id: `item_dep_${seq}`,
+      type: 'provided_itemstack',
+      category: 'item',
+      title: 'Provided itemstack',
     };
   }
 
@@ -7786,6 +7860,54 @@ export function parseExpressionToAST(rawExpr: string, seq: number): BlockASTNode
       category: 'item',
       title: 'Copy of itemstack',
       values: [{ name: 'item', block: parseExpressionToAST(target, seq * 10 + 1) }],
+    };
+  }
+
+  // FLY / WALK SPEED PARAMETERS: (entity instanceof Player _plr ? _plr.getAbilities().getFlyingSpeed() : 0)
+  if (expr.includes('getFlyingSpeed()')) {
+    const entMatch = expr.match(/^([\s\S]+?)\s+instanceof\s+Player/);
+    const targetEnt = entMatch ? entMatch[1].trim() : 'entity';
+    return {
+      id: `fly_speed_${seq}`,
+      type: 'entity_get_fly_speed',
+      category: 'player',
+      title: 'Get base fly speed parameter of',
+      values: [{ name: 'entity', block: parseExpressionToAST(targetEnt, seq * 10 + 1) }],
+    };
+  }
+
+  if (expr.includes('getWalkingSpeed()')) {
+    const entMatch = expr.match(/^([\s\S]+?)\s+instanceof\s+Player/);
+    const targetEnt = entMatch ? entMatch[1].trim() : 'entity';
+    return {
+      id: `walk_speed_${seq}`,
+      type: 'entity_get_walk_speed',
+      category: 'player',
+      title: 'Get base walk speed parameter of',
+      values: [{ name: 'entity', block: parseExpressionToAST(targetEnt, seq * 10 + 1) }],
+    };
+  }
+
+  // ITEM NBT ITEMSTACK GET: ItemStack.parseOptional(...) / OPTIONAL_CODEC.parse(...)
+  if (
+    expr.includes('ItemStack.parseOptional(') ||
+    expr.includes('ItemStack.OPTIONAL_CODEC.parse(') ||
+    (expr.includes('.getOrDefault(DataComponents.CUSTOM_DATA') && expr.includes('getCompound'))
+  ) {
+    const tagMatch = expr.match(/getCompound(?:OrEmpty)?\s*\(\s*(["']?[^)]+?["']?)\s*\)/);
+    const tagExpr = tagMatch ? tagMatch[1].trim() : '"tag"';
+    const itemMatch = expr.match(/([a-zA-Z0-9_.]+)\.getOrDefault\(DataComponents\.CUSTOM_DATA/);
+    const itemTarget = itemMatch ? itemMatch[1].trim() : 'itemstack';
+
+    return {
+      id: `item_nbt_itemstack_get_${seq}`,
+      type: 'item_nbt_itemstack_get',
+      category: 'item',
+      title: 'Get custom data itemstack tag',
+      values: [
+        { name: 'tagName', block: parseExpressionToAST(tagExpr, seq * 10 + 1) },
+        { name: 'item', block: parseExpressionToAST(itemTarget, seq * 10 + 2) },
+      ],
     };
   }
 
