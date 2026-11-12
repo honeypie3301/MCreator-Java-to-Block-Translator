@@ -359,17 +359,30 @@ export function translateJavaToMCreator(
   const nodes: BlockASTNode[] = [];
 
   for (const stmtObj of statementsWithLoc) {
-    const parsed = parseJavaStatement(
-      stmtObj.text,
-      idCounter++,
-      variables,
-      breakdown,
-      elementType,
-      stmtObj.startLine,
-      stmtObj.endLine
-    );
-    if (parsed) {
-      nodes.push(parsed);
+    try {
+      const parsed = parseJavaStatement(
+        stmtObj.text,
+        idCounter++,
+        variables,
+        breakdown,
+        elementType,
+        stmtObj.startLine,
+        stmtObj.endLine
+      );
+      if (parsed) {
+        nodes.push(parsed);
+      }
+    } catch (stmtErr: any) {
+      console.warn('Failed parsing statement, falling back to snippet:', stmtObj.text, stmtErr);
+      nodes.push({
+        id: "snippet_" + (idCounter++),
+        type: 'custom_code_snippet',
+        category: 'code',
+        title: 'Custom code snippet',
+        fields: { CODE: stmtObj.text },
+        sourceLine: stmtObj.startLine,
+        sourceEndLine: stmtObj.endLine,
+      });
     }
   }
 

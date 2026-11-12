@@ -325,12 +325,7 @@ export default function App() {
                 <p>Input your Java code and click "Convert Code to Blocks".</p>
               </div>
             ) : (
-              <Suspense fallback={
-                <div className="h-full flex flex-col items-center justify-center text-center space-y-2 py-12 text-[#A39B8E]">
-                  <div className="w-6 h-6 border-2 border-[#CEB098]/30 border-t-[#CEB098] rounded-full animate-spin" />
-                  <span className="text-xs font-mono">Loading workspace view...</span>
-                </div>
-              }>
+              <>
                 {activeTab === 'visual' && (
                   <VisualBlockCanvas
                     ast={result.visualAST}
@@ -357,7 +352,7 @@ export default function App() {
                     breakdown={result.translationBreakdown}
                   />
                 )}
-              </Suspense>
+              </>
             )}
           </div>
         </div>
