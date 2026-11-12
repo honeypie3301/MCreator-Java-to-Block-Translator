@@ -2091,7 +2091,7 @@ function parseJavaStatementInternal(
 ): BlockASTNode | null {
   const trimmedStmt = stmt.trim();
 
-  const damageWrapper = trimmedStmt.match(/^if\s*\(\s*world\s+instanceof\s+ServerLevel\s+([\w]+)\s*\)\s*\{\s*([\w]+\.hurtAndBreak\([\s\S]*?\);)\s*\}$/);
+  const damageWrapper = trimmedStmt.match(/^if\s*\(\s*world\s+instanceof\s+ServerLevel\s+([\w]+)\s*\)\s*\{\s*([\s\S]+?\.hurtAndBreak\([\s\S]*?\);)\s*\}$/);
   if (damageWrapper) {
     return parseJavaStatement(damageWrapper[2], idSeq, variables, breakdown, elementType, startLine, endLine);
   }
@@ -2987,6 +2987,17 @@ function parseJavaStatementInternal(
   }
 
   if (stmt.includes('.setBlock(') || stmt.includes('.setBlockAndUpdate(')) {
+    const args = extractFunctionArguments(stmt, stmt.includes('.setBlockAndUpdate(') ? 'setBlockAndUpdate' : 'setBlock');
+    if (args.length >= 4) {
+      const blockMatch = args[3].match(/\b([\w]+ModBlocks|Blocks)\.([A-Z0-9_]+)/);
+      if (blockMatch) {
+        const rawBlock = blockMatch[1] === 'Blocks' ? `Blocks.${blockMatch[2]}` : blockMatch[2];
+        return { id: `blk_rep_${idSeq}`, type: 'block_replace', category: 'block', title: 'Replace block at', fields: { state: 'FALSE', nbt: 'FALSE' }, values: [
+          ...args.slice(0, 3).map((coord, index) => ({ name: ['x', 'y', 'z'][index], block: parseExpressionToAST(coord, idSeq * 10 + index + 1) })),
+          { name: 'block', block: { id: `mcitem_${idSeq}`, type: 'mcitem_all', category: 'item', title: formatItemDisplayName(rawBlock), fields: { value: formatItemFieldValue(rawBlock) } } },
+        ] };
+      }
+    }
     const setMatch = stmt.match(/\.setBlock(?:AndUpdate)?\s*\(([^,]+),([^,]+)/);
     const posExpr = setMatch ? setMatch[1].trim() : 'pos';
     const stateExpr = setMatch ? setMatch[2].trim() : 'state';
@@ -3060,7 +3071,7 @@ function parseJavaStatementInternal(
 
   if (stmt.includes(".destroyBlock(")) {
     const hasParticles = !stmt.includes("false)");
-    const blockType = hasParticles ? "block_remove_drop" : "block_remove";
+    const blockType = hasParticles ? "block_remove_drop" : "block_remove_with_particles";
     const title = hasParticles ? "Remove block at and spawn break particles" : "Remove block at";
 
     breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `block_rem_${idSeq}`, mcreatorBlock: blockType, explanation: title });
@@ -3660,7 +3671,7 @@ function parseJavaStatementInternal(
   if (stmt.includes('.hurtAndBreak(')) {
     const dmgMatch = stmt.match(/hurtAndBreak\(([^,]+),/);
     const dmg = dmgMatch ? dmgMatch[1].trim() : '1';
-    const targetMatch = stmt.match(/^([a-zA-Z0-9_]+)\.hurtAndBreak/);
+    const targetMatch = stmt.match(/^([\s\S]+?)\.hurtAndBreak/);
     const targetName = targetMatch ? targetMatch[1] : 'itemstack';
 
     breakdown.push({ javaLine: stmt, lineNumber: startLine, blockId: `hurt_break_${idSeq}`, mcreatorBlock: 'item_damage', explanation: 'Deal damage to itemstack' });
@@ -4352,6 +4363,14 @@ function parseForLoopStatement(
     const condPart = parts[1] || 'i < 10';
     const incPart = parts[2] || 'i++';
 
+    const repeatInit = initPart.match(/^int\s+(_i\d+)\s*=\s*0$/);
+    if (repeatInit && incPart === `${repeatInit[1]}++` && !new RegExp(`\\b${repeatInit[1]}\\b`).test(body)) {
+      const repeatCond = condPart.match(new RegExp(`^${repeatInit[1]}\\s*<\\s*([\\s\\S]+)$`));
+      if (repeatCond) {
+        return { id: `repeat_${idSeq}`, type: 'controls_repeat_ext', category: 'control', title: 'Repeat times', values: [{ name: 'TIMES', block: parseExpressionToAST(repeatCond[1], idSeq * 10 + 1) }], statements: [{ name: 'DO', block: innerNodes.length ? chainNodes(innerNodes) : undefined }] };
+      }
+    }
+
     const varMatch = initPart.match(/(?:int|float|double)?\s*([a-zA-Z0-9_]+)\s*=\s*([\s\S]+)/);
     const varName = varMatch ? varMatch[1] : 'i';
     const fromVal = varMatch ? varMatch[2] : '0';
@@ -4812,6 +4831,16 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
   if (handItem) {
     const main = handItem[3] === 'MainHand';
     return { id: `hand_${seq}`, type: main ? 'entity_iteminhand' : 'entity_iteminoffhand', category: 'item', title: main ? 'Item in main-hand of' : 'Item in off-hand of', values: [{ name: 'entity', block: parseExpressionToAST(handItem[1], seq * 10 + 1) }] };
+  }
+
+  const blockComparison = expr.match(/^\(*\s*(?:world|level)\.getBlockState\(\s*([^,]+),\s*([^,]+),\s*([^)]+)\)\s*\)*\.getBlock\(\)\s*==\s*([\w]+ModBlocks|Blocks)\.([A-Z0-9_]+)(?:\.get\(\))?$/);
+  if (blockComparison) {
+    const rawBlock = blockComparison[4] === 'Blocks' ? `Blocks.${blockComparison[5]}` : blockComparison[5];
+    const coords = blockComparison.slice(1, 4);
+    return { id: `compare_block_${seq}`, type: 'compare_mcblocks', category: 'block', title: 'Compare blocks', values: [
+      { name: 'a', block: { id: `get_block_${seq}`, type: 'world_get_block', category: 'world', title: 'Get block at', values: coords.map((coord, index) => ({ name: ['x', 'y', 'z'][index], block: parseExpressionToAST(coord, seq * 10 + index + 1) })) } },
+      { name: 'b', block: { id: `block_${seq}`, type: 'mcitem_all', category: 'item', title: formatItemDisplayName(rawBlock), fields: { value: formatItemFieldValue(rawBlock) } } },
+    ] };
   }
 
   if (/^\(?\s*(?:\(int\)|int\s*\))?\s*(?:Double\.POSITIVE_INFINITY|Float\.POSITIVE_INFINITY|Integer\.MAX_VALUE)\s*\)?$/i.test(expr)) {
