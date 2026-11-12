@@ -1,0 +1,9 @@
+# Translator regression checks
+
+Run `npm test` after installing dependencies. The runner compiles the converter to a temporary directory, then runs each mapping example in a separate worker with a timeout. It checks block types, connections, fields and selected XML boundaries. Expected mappings come from MCreator's core procedure definitions and generator templates, not from snapshots of the translator's output.
+
+Run `npm run test:corpus` to additionally read `src_digest-1.21.1.txt` and `src_digest-26.1.2.txt` from your Downloads folder. The digest files stay outside the repository. Files with Java comments are skipped, including MCreator's generated comments; comment markers in string and character literals do not count. Each remaining procedure is converted with its corresponding version. The runner reports exceptions, timeouts, invalid tree structure and snippet counts, and exits nonzero on failures.
+
+The corpus does **not** know the correct blocks for each procedure. A passing corpus run means conversion completed and basic output checks passed, not that the translation preserves behavior. Snippets may be expected; their count is informational. Add a mapping test for each confirmed error, using the MCreator template or a known matching procedure template as the independent expectation.
+
+To use different digest paths, pass them after `--`: `npm run test:corpus -- "C:\path\src_digest-1.21.1.txt"`. Filenames must include `1.21.1` or `26.1.2`. Use `--limit=10` to inspect the first ten uncommented procedures in each digest, or `--timeout=5000` for a five-second per-procedure timeout: `npm run test:corpus -- --limit=10 --timeout=5000`. The limit is for a quick sample; omit it for the full corpus. The report lists up to ten procedures with the most snippets to help choose examples for further review.
