@@ -553,7 +553,7 @@ function unwrapMCreatorBoilerplate(text: string): string {
     (_, res) => {
       const parts = res.split(':');
       const name = parts.length > 1 ? parts[1] : parts[0];
-      return 'CUSTOM:' + name.charAt(0).toUpperCase() + name.slice(1);
+      return 'CUSTOM:' + name.split('_').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join('');
     }
   );
 
@@ -2091,6 +2091,21 @@ function parseJavaStatementInternal(
 ): BlockASTNode | null {
   const trimmedStmt = stmt.trim();
 
+  const damageWrapper = trimmedStmt.match(/^if\s*\(\s*world\s+instanceof\s+ServerLevel\s+([\w]+)\s*\)\s*\{\s*([\w]+\.hurtAndBreak\([\s\S]*?\);)\s*\}$/);
+  if (damageWrapper) {
+    return parseJavaStatement(damageWrapper[2], idSeq, variables, breakdown, elementType, startLine, endLine);
+  }
+
+  const portal = trimmedStmt.match(/^if\s*\(\s*world\s+instanceof\s+Level\s+(\w+)\s*\)\s*([\w]+)PortalBlock\.portalSpawn\(/);
+  if (portal) {
+    const args = extractFunctionArguments(trimmedStmt, 'portalSpawn');
+    const coords = args.length === 4 ? args.slice(1) : args.length === 2 ? extractFunctionArguments(args[1], 'BlockPos.containing') : [];
+    if (args[0] === portal[1] && coords.length === 3) {
+      breakdown.push({ javaLine: stmt, lineNumber: startLine, mcreatorBlock: 'world_make_portal', explanation: 'Create dimension portal' });
+      return { id: `portal_${idSeq}`, type: 'world_make_portal', category: 'world', title: 'Create portal', fields: { dimension: `CUSTOM:${portal[2]}` }, values: coords.map((coord, index) => ({ name: ['x', 'y', 'z'][index], block: parseExpressionToAST(coord, idSeq * 10 + index + 1) })) };
+    }
+  }
+
   if (!trimmedStmt || /^[\s\}\);]+$/.test(trimmedStmt)) {
     return null;
   }
@@ -3092,18 +3107,21 @@ function parseJavaStatementInternal(
       const params = splitArgs(argsStr);
 
       let soundName = 'sound';
+      let mappedSound = false;
       let xExpr = 'x', yExpr = 'y', zExpr = 'z';
       let levelExpr = '1', pitchExpr = '1', categoryStr = 'ambient';
 
       if (params[0] === 'null') {
-        const rawSound = (params[4] || '').replace(/SoundEvents\.(CUSTOM_)?/, '').toLowerCase();
-        soundName = rawSound ? `CUSTOM:${rawSound}` : 'CUSTOM:sound';
+        const rawSound = (params[4] || '').trim();
+        const literalSound = rawSound.match(/^["']([^"']+)["']$/);
+        mappedSound = !!literalSound;
+        soundName = literalSound ? literalSound[1] : rawSound.replace(/SoundEvents\.(CUSTOM_)?/, '').toLowerCase() || 'sound';
         xExpr = params[1] || 'x';
         yExpr = params[2] || 'y';
         zExpr = params[3] || 'z';
         levelExpr = params[6] || '1';
         pitchExpr = params[7] || '1';
-        categoryStr = (params[5] || 'ambient').replace(/SoundSource\./, '').toLowerCase();
+        categoryStr = (params[5] || 'ambient').replace(/SoundSource\./, '').replace(/["']/g, '').toLowerCase();
       } else {
         soundName = params[0] ? params[0].replace(/"/g, '') : 'sound';
         xExpr = params[1] || 'x';
@@ -3114,7 +3132,7 @@ function parseJavaStatementInternal(
         categoryStr = params[6] ? params[6].replace(/"/g, '') : 'ambient';
       }
 
-      if (!soundName.includes(':')) soundName = `CUSTOM:${soundName}`;
+      if (!mappedSound && !soundName.includes(':')) soundName = `CUSTOM:${soundName}`;
 
       breakdown.push({ javaLine: stmt, mcreatorBlock: 'play_sound', explanation: `Play sound '${soundName}'` });
       return {
@@ -4790,6 +4808,12 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     }
   }
 
+  const handItem = expr.match(/^([\w.]+)\s+instanceof\s+LivingEntity\s+(\w+)\s*\?\s*\2\.get(MainHand|Offhand)Item\(\)\s*:\s*ItemStack\.EMPTY$/);
+  if (handItem) {
+    const main = handItem[3] === 'MainHand';
+    return { id: `hand_${seq}`, type: main ? 'entity_iteminhand' : 'entity_iteminoffhand', category: 'item', title: main ? 'Item in main-hand of' : 'Item in off-hand of', values: [{ name: 'entity', block: parseExpressionToAST(handItem[1], seq * 10 + 1) }] };
+  }
+
   if (/^\(?\s*(?:\(int\)|int\s*\))?\s*(?:Double\.POSITIVE_INFINITY|Float\.POSITIVE_INFINITY|Integer\.MAX_VALUE)\s*\)?$/i.test(expr)) {
     return {
       id: `math_num_${seq}`,
@@ -5478,7 +5502,7 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     const right = expr.substring(index + length).trim();
 
     if (
-      (left.includes('.getItem()') || left.includes('itemstack') || left.includes('ItemStack')) &&
+      op === '==' && (left.includes('.getItem()') || left.includes('itemstack') || left.includes('ItemStack')) &&
       (right.includes('.getItem()') || right.includes('Blocks.') || right.includes('Items.') || right.includes('ModBlocks') || right.includes('ModItems') || right.includes('asItem()'))
     ) {
       const cleanLeft = left.replace(/\.getItem\(\)/g, '').trim();
@@ -5497,7 +5521,7 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
 
     const dimLhs = left.match(/(?:entity|player|living)\.level\(\)\.dimension\(\)/);
     const dimRhs = right.match(/(?:entity|player|living)\.level\(\)\.dimension\(\)/);
-    if (dimLhs || dimRhs || left.includes('.dimension()') || right.includes('.dimension()')) {
+    if (op === '==' && (dimLhs || dimRhs || left.includes('.dimension()') || right.includes('.dimension()'))) {
       const entSide = (dimLhs || left.includes('.dimension()')) ? left : right;
       const dimSide = (dimLhs || left.includes('.dimension()')) ? right : left;
 
@@ -5515,7 +5539,8 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
       };
 
       const rawDim = dimSide.trim();
-      const dimName = rawDim.includes(':') ? rawDim : `CUSTOM:${rawDim}`;
+      const vanillaDimensions: Record<string, string> = { 'Level.OVERWORLD': 'Surface', 'Level.NETHER': 'Nether', 'Level.END': 'End' };
+      const dimName = vanillaDimensions[rawDim] || (rawDim.startsWith('CUSTOM:') ? rawDim : `CUSTOM:${rawDim}`);
       const dimTypeBlock: BlockASTNode = {
         id: `dim_type_${seq}`,
         type: 'get_dimensionid',
@@ -7605,7 +7630,7 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     const target = expr.replace(/\.getMainHandItem\(\)$/, '').trim();
     return {
       id: `mainhand_${seq}`,
-      type: 'entity_get_mainhand_item',
+      type: 'entity_iteminhand',
       category: 'item',
       title: 'Item in main hand',
       values: [{ name: 'entity', block: parseExpressionToAST(target, seq * 10 + 1) }],
@@ -7616,7 +7641,7 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     const target = expr.replace(/\.getOffhandItem\(\)$/, '').trim();
     return {
       id: `offhand_${seq}`,
-      type: 'entity_get_offhand_item',
+      type: 'entity_iteminoffhand',
       category: 'item',
       title: 'Item in off hand',
       values: [{ name: 'entity', block: parseExpressionToAST(target, seq * 10 + 1) }],
