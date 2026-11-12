@@ -1,5 +1,4 @@
 @echo off
 cd /d "%~dp0"
-call pm2 delete mcreator-translator >nul 2>&1
-echo.
-echo MCreator Translator stopped.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0localhost.ps1" stop
+if errorlevel 1 pause

@@ -13,7 +13,7 @@ const CHUNK_1: BlockDefinition[] = [
   // =========================================================================
   {
     id: 'custom_code_snippet',
-    mcreatorType: 'custom_code_snippet',
+    mcreatorType: 'java_code',
     category: 'code',
     title: 'Custom code snippet',
     label: 'Custom code snippet',
@@ -32,7 +32,7 @@ const CHUNK_1: BlockDefinition[] = [
   },
   {
     id: 'custom_code_snippet_output',
-    mcreatorType: 'custom_code_snippet',
+    mcreatorType: 'java_code_get',
     category: 'code',
     title: 'Custom code snippet (Expression)',
     label: 'Custom code snippet: [ (null) ]',
@@ -1961,20 +1961,20 @@ const CHUNK_1: BlockDefinition[] = [
     id: 'math_dual_ops',
     mcreatorType: 'math_dual_ops',
     category: 'math',
-    title: 'Math min / max',
-    label: 'min / max of A and B',
-    description: 'Dual mathematical functions min, max, atan2, hypot',
+    title: 'Math operation',
+    label: 'A [operation] B',
+    description: 'Arithmetic, power, remainder, bitwise, minimum, maximum, hypot and atan2 operations',
     supportedElements: ['procedure'],
     fields: ['OP'],
     fieldTypes: { OP: 'field_dropdown' },
     inputs: ['A', 'B'],
     valueInputs: ['A', 'B'],
     outputType: 'Number',
-    javaPatterns: ['Math.min', 'Math.max', 'Math.atan2'],
+    javaPatterns: [' + ', ' - ', ' * ', ' / ', ' % ', 'Math.pow', 'Math.min', 'Math.max', 'Math.atan2', 'Math.hypot'],
     blockClassification: 'core_static',
     toolbox: 'Math',
-    toolboxPath: 'Math -> Min / Max',
-    sourceFile: 'plugins/mcreator-core/blockly/js/blocks_math.js',
+    toolboxPath: 'Math -> Arithmetic',
+    sourceFile: 'src/main/java/net/mcreator/blockly/java/blocks/NumberBinaryOperationsBlock.java',
     sourceLine: 80,
   },
   {
@@ -1983,7 +1983,7 @@ const CHUNK_1: BlockDefinition[] = [
     category: 'math',
     title: 'Math single operation',
     label: 'sin / cos / abs / sqrt / round of A',
-    description: 'Unary mathematical operations: ROOT, ABS, LN, LOG10, EXP, ROUND, ROUNDUP, ROUNDDOWN, SIN, COS, TAN',
+    description: 'Unary mathematical operations including roots, rounding, absolute value, logarithms and trigonometry',
     supportedElements: ['procedure'],
     fields: ['OP'],
     fieldTypes: { OP: 'field_dropdown' },
@@ -1994,7 +1994,7 @@ const CHUNK_1: BlockDefinition[] = [
     blockClassification: 'core_static',
     toolbox: 'Math',
     toolboxPath: 'Math -> Trigonometry / Single ops',
-    sourceFile: 'plugins/mcreator-core/blockly/js/blocks_math.js',
+    sourceFile: 'src/main/java/net/mcreator/blockly/java/blocks/SingularMathOperationsBlock.java',
     sourceLine: 120,
   },
   {
@@ -20299,4 +20299,47 @@ const CHUNK_5: BlockDefinition[] = [
   },
 ];
 
-export const MCREATOR_BLOCK_DATABASE: BlockDefinition[] = ([] as BlockDefinition[]).concat(CHUNK_1, CHUNK_2, CHUNK_3, CHUNK_4, CHUNK_5);
+// Alternate names previously listed alongside the corresponding MCreator core
+// block. Keep this explicit: similar labels or Java fragments can represent
+// different blocks (for example entity NBT and block NBT operations).
+const REGISTRY_ALIASES: Record<string, string> = {
+  math_binary: 'math_dual_ops',
+  java_code: 'custom_code_snippet', java_code_get: 'custom_code_snippet_output',
+  entity_is_onfire: 'entity_isburning', entity_is_inwater: 'entity_isinwater',
+  entity_has_potioneffect: 'entity_haspotioneffect', entity_is_sneaking: 'entity_issneaking',
+  entity_is_sprinting: 'entity_issprinting', entity_is_alive: 'entity_isalive',
+  entity_is_tamed: 'entity_istamed', entity_get_owner: 'entity_getowner',
+  entity_is_passenger: 'entity_isriding', entity_get_vehicle: 'entity_getridingentity',
+  entity_get_target: 'entity_gettargetentity', entity_stop_riding: 'entity_makestopriding',
+  entity_get_health: 'entity_health', entity_get_max_health: 'entity_health_max',
+  entity_get_food_level: 'entity_foodlevel', entity_set_food_level: 'entity_set_foodlevel',
+  entity_get_xp_level: 'entity_xplevel',
+  direction_for_each: 'direction_foreach', direction_for_each_horizontal: 'direction_foreach_horizontal',
+  block_fluid_tank_get: 'block_fluidtank_get', block_fluid_tank_drain: 'block_fluidtank_drain',
+  world_data_is_day: 'world_data_isday', world_data_moonphase: 'world_data_moon_phase',
+  world_data_biome_at: 'world_data_biomeat', world_data_is_air: 'world_data_isair',
+  world_data_is_raining: 'world_data_israining', world_data_is_thundering: 'world_data_isthundering',
+  team_get_friendly_fire: 'team_get_friendlyfire', team_set_friendly_fire: 'team_set_friendlyfire',
+  team_set_death_message_visibility: 'team_set_deathmessage_visibility',
+  team_set_name_tag_visibility: 'team_set_nametag_visibility',
+  damagesource_is_creative: 'damagesource_is_cause_creative',
+  text_indexof: 'text_index_of', text_newline: 'text_new_line',
+  mcreator_link_send_message: 'mcreator_link_sendmessage', mcreator_link_pin_mode: 'mcreator_link_pinmode',
+  mcreator_link_digital_read: 'mcreator_link_digitalread', mcreator_link_analog_read: 'mcreator_link_analogread',
+};
+
+function buildBlockDatabase(entries: BlockDefinition[]): BlockDefinition[] {
+  const byId = new Map<string, BlockDefinition>();
+  const available = new Set(entries.map(entry => entry.id));
+  for (const entry of entries) {
+    if (REGISTRY_ALIASES[entry.id] && available.has(REGISTRY_ALIASES[entry.id])) continue;
+    const existing = byId.get(entry.id);
+    // Prefer the actual core block definition when multiple records share an ID.
+    if (!existing || (entry.sourceFile?.startsWith('plugins/mcreator-core/procedures/') && !existing.sourceFile?.startsWith('plugins/mcreator-core/procedures/'))) {
+      byId.set(entry.id, entry);
+    }
+  }
+  return [...byId.values()];
+}
+
+export const MCREATOR_BLOCK_DATABASE = buildBlockDatabase([...CHUNK_1, ...CHUNK_2, ...CHUNK_3, ...CHUNK_4, ...CHUNK_5]);

@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { Worker } from 'node:worker_threads';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -56,6 +57,34 @@ function procedure(body) { return `class Example { public static void execute(Le
 
 // Templates: mcreator-core/procedures and generator-1.21.1/neoforge-1.21.1/procedures.
 const cases = [
+  { name: 'custom snippets use MCreator statement and value types', source: procedure('double custom = unusualCall(); unknownStatement();'), check(ast, result) {
+    assert.match(result.xml, /<block type="java_code_get">/);
+    assert.match(result.xml, /<block type="java_code">/);
+  } },
+  { name: 'hurt event preserves negation, source entity and health calculation', source: `class Example {
+    @SubscribeEvent public static void onEntityAttacked(LivingDamageEvent.Pre event) { execute(event, event.getEntity(), event.getSource().getEntity(), event.getOriginalDamage()); }
+    private static void execute(Event event, Entity entity, Entity sourceentity, double amount) {
+      if (entity instanceof PetrifiedLignumTrilobitaEntity && !((sourceentity instanceof LivingEntity _livEnt ? _livEnt.getMainHandItem() : ItemStack.EMPTY).is(ItemTags.create(ResourceLocation.parse("minecraft:axes"))))) {
+        if (entity instanceof LivingEntity _entity) _entity.setHealth((float) ((entity instanceof LivingEntity _livEnt ? _livEnt.getHealth() : -1) + amount * 0.3));
+      }
+    }
+  }`, check(ast, result) {
+    assert.equal(result.trigger, 'entity_pre_hurt');
+    const all = nodes(ast);
+    const neg = all.find(n => n.type === 'logic_negate');
+    assert(neg, 'missing not block');
+    const tag = input(neg, 'BOOL');
+    assert.equal(tag.type, 'compare_mcitems_oredictionary');
+    assert.equal(input(input(tag, 'a'), 'entity').type, 'source_entity_from_deps');
+    const health = all.find(n => n.type === 'entity_set_health');
+    assert(health, 'missing set health');
+    const value = input(health, 'health');
+    assert.equal(value.type, 'math_dual_ops');
+    assert(nodes(value).some(n => n.type === 'entity_health'));
+    assert(nodes(value).some(n => n.type === 'custom_dependency_number' && n.fields.NAME === 'amount'));
+    assert.match(result.xml, /<block type="custom_dependency_number">\s*<field name="NAME">amount<\/field>/);
+    assert(nodes(value).some(n => n.type === 'math_number' && n.fields.NUM === '0.3'));
+  } },
   { name: 'main hand comparison', expression: true, source: '(entity instanceof LivingEntity _livEnt ? _livEnt.getMainHandItem() : ItemStack.EMPTY).getItem() == TheBackwoodsModItems.SPLINTER_NEEDLE.get()', check(ast) {
     assert.equal(ast.type, 'compare_mcitems');
     assert.equal(input(ast, 'a').type, 'entity_iteminhand');
@@ -89,6 +118,60 @@ const cases = [
     assert(all.some(n => n.type === 'controls_repeat_ext'));
   } },
 ];
+
+cases.push({ name: 'nested distance math retains NBT sources and exponents', expression: true,
+  source: 'Math.sqrt(Math.pow(x - immediatesourceentity.getPersistentData().getDouble("startX"), 2) + Math.pow(y - immediatesourceentity.getPersistentData().getDouble("startY"), 2) + Math.pow(z - immediatesourceentity.getPersistentData().getDouble("startZ"), 2))',
+  check(ast) {
+    assert.equal(ast.type, 'math_singular_ops');
+    assert.equal(ast.fields.OP, 'ROOT');
+    const all = nodes(ast);
+    assert.equal(all.filter(n => n.type === 'math_dual_ops' && n.fields.OP === 'POWER').length, 3);
+    const tags = all.filter(n => n.type === 'entity_nbt_num_get');
+    assert.equal(tags.length, 3);
+    assert.deepEqual(tags.map(n => input(n, 'tagName')?.fields?.TEXT).sort(), ['startX', 'startY', 'startZ']);
+    for (const tag of tags) assert.equal(input(tag, 'entity').type, 'immediate_source_entity_from_deps');
+  } });
+cases.push({ name: 'unsupported math call preserves the complete expression', expression: true, source: 'Math.exp(entity.getPersistentData().getDouble("value"))', check(ast) {
+  assert.equal(ast.type, 'custom_code_snippet');
+  assert.equal(ast.fields.CODE, 'Math.exp(entity.getPersistentData().getDouble("value"))');
+} });
+cases.push({ name: 'arithmetic following a math call stays outside the call', expression: true, source: 'Math.pow(x, 2) + Math.pow(y, 2)', check(ast) {
+  assert.equal(ast.type, 'math_dual_ops'); assert.equal(ast.fields.OP, 'ADD');
+  assert.equal(input(ast, 'A').fields.OP, 'POWER'); assert.equal(input(ast, 'B').fields.OP, 'POWER');
+} });
+cases.push({ name: 'math operations export valid block types', source: procedure('double traveledDist = Math.sqrt(Math.pow(x, 2) + Math.pow(y, 2));'), check(ast, result) {
+  assert.match(result.xml, /<block type="math_singular_ops">/);
+  assert.match(result.xml, /<block type="math_dual_ops">/);
+  assert.match(result.xml, /<field name="OP">POWER<\/field>/);
+  assert(!result.xml.includes('type="math_binary"'));
+} });
+for (const [fn, op] of Object.entries({ sqrt: 'ROOT', cbrt: 'CUBEROOT', round: 'ROUND', ceil: 'ROUNDUP', floor: 'ROUNDDOWN', abs: 'ABS', signum: 'SIGNUM', log: 'LN', log10: 'LOG10', sin: 'SIN', cos: 'COS', tan: 'TAN', asin: 'ASIN', acos: 'ACOS', atan: 'ATAN', toDegrees: 'RAD2DEG', toRadians: 'DEG2RAD' })) {
+  cases.push({ name: `math: ${fn}`, expression: true, source: `Math.${fn}(x)`, check(ast) { assert.equal(ast.type, 'math_singular_ops'); assert.equal(ast.fields.OP, op); } });
+}
+for (const [fn, op] of Object.entries({ pow: 'POWER', min: 'MIN', max: 'MAX', hypot: 'HYPOT', atan2: 'ATAN2' })) {
+  cases.push({ name: `math: ${fn}`, expression: true, source: `Math.${fn}(x, y)`, check(ast) { assert.equal(ast.type, 'math_dual_ops'); assert.equal(ast.fields.OP, op); } });
+}
+for (const [source, op] of Object.entries({ 'Double.POSITIVE_INFINITY': 'INFINITY', 'Double.NEGATIVE_INFINITY': 'NINFINITY', 'Double.NaN': 'NAN' })) {
+  cases.push({ name: `math constant: ${source}`, expression: true, source, check(ast) { assert.equal(ast.type, 'math_java_constants'); assert.equal(ast.fields.CONSTANT, op); } });
+}
+
+for (const [name, source, expected] of [
+  ['alive', 'sourceentity.isAlive()', 'entity_isalive'],
+  ['being ridden', 'sourceentity.isVehicle()', 'entity_isbeingridden'],
+  ['blocking', 'sourceentity instanceof LivingEntity _livEnt && _livEnt.isBlocking()', 'entity_isblocking'],
+  ['burning', 'sourceentity.isOnFire()', 'entity_isburning'],
+  ['aggressive', 'sourceentity instanceof Mob _mobEnt && _mobEnt.isAggressive()', 'entity_isaggressive'],
+  ['explosion immunity', 'sourceentity.ignoreExplosion(new Explosion(sourceentity.level(), null, 0, 0, 0, 4, true, Explosion.BlockInteraction.DESTROY))', 'entity_isimmunetoexplosions'],
+  ['fire immunity', 'sourceentity.fireImmune()', 'entity_isimmunetofire'],
+  ['lava', 'sourceentity.isInLava()', 'entity_isinlava'],
+  ['inside wall', 'sourceentity.isInWall()', 'entity_isinwall'],
+  ['invisible', 'sourceentity.isInvisible()', 'entity_isinvisible'],
+]) {
+  cases.push({ name: `entity data: ${name}`, expression: true, source: `(${source})`, check(ast) {
+    assert.equal(ast.type, expected);
+    assert.equal(input(ast, 'entity').type, 'source_entity_from_deps');
+  } });
+}
 
 // Ignore Java comments, but do not mistake comment markers in strings for comments.
 function hasComment(text) {
@@ -124,16 +207,24 @@ async function main() {
   assert(!hasComment('String url = "https://example.test/a";'));
   assert(!hasComment('String text = """not // a comment""";'));
   const tsc = path.join(root, 'node_modules', 'typescript', 'bin', 'tsc');
-  const build = spawnSync(process.execPath, [tsc, '--target', 'ES2020', '--module', 'commonjs', '--moduleResolution', 'node', '--skipLibCheck', '--outDir', temp, 'src/lib/mcreatorConverter.ts', 'src/types.ts', 'src/data/elementConfigs.ts'], { cwd: root, encoding: 'utf8' });
+  const build = spawnSync(process.execPath, [tsc, '--target', 'ES2020', '--module', 'commonjs', '--moduleResolution', 'node', '--skipLibCheck', '--outDir', temp, 'src/lib/mcreatorConverter.ts', 'src/types.ts', 'src/data/elementConfigs.ts', 'src/data/mcreatorBlocksDatabase.ts'], { cwd: root, encoding: 'utf8' });
   if (build.status !== 0) throw new Error(`Could not compile converter:\n${build.stdout}\n${build.stderr}`);
   writeFileSync(path.join(temp, 'package.json'), '{"type":"commonjs"}');
+  const registry = createRequire(import.meta.url)(path.join(temp, 'data', 'mcreatorBlocksDatabase.js')).MCREATOR_BLOCK_DATABASE;
+  assert.equal(new Set(registry.map(block => block.id)).size, registry.length, 'Duplicate block IDs in registry');
+  assert.equal(new Set(registry.map(block => block.mcreatorType)).size, registry.length, 'Duplicate MCreator block types in registry');
+  assert.equal(new Set(registry.map(block => block.id.toLowerCase().replace(/_/g, ''))).size, registry.length, 'Block IDs differ only by underscores');
+  assert(registry.some(block => block.id === 'entity_isalive'));
+  assert(!registry.some(block => block.id === 'entity_is_alive'));
+  assert(registry.some(block => block.id === 'custom_code_snippet') && registry.some(block => block.id === 'custom_code_snippet_output'));
+  console.log(`PASS registry IDs and distinct snippet shapes (${registry.length} entries)`);
   let failed = 0;
   for (const version of ['1.21.1', '26.1.2']) {
     for (const test of cases) {
       const result = await translate(test.source, version, test.expression);
       try {
         assert(!result.error, result.error);
-        test.check(result.ast);
+        test.check(result.ast, result);
         if (result.xml) assert(result.xml.startsWith('<xml ') && result.xml.trimEnd().endsWith('</xml>'));
         console.log(`PASS ${version} ${test.name}`);
       } catch (error) { failed++; console.error(`FAIL ${version} ${test.name}: ${error.message}`); }

@@ -18,6 +18,7 @@ import {
   HelpCircle,
   Maximize2,
   Minimize2,
+  Download,
 } from 'lucide-react';
 import { GLOBAL_TRIGGERS } from '../lib/mcreatorConverter';
 
@@ -501,9 +502,40 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [viewMode, setViewMode] = useState<'blockly' | 'tree'>('blockly');
+  const canvasContentRef = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   const inputLayoutMode = 'auto';
 
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  const exportImage = async (format: 'png' | 'svg' | 'jpeg') => {
+    const content = canvasContentRef.current;
+    if (!content || viewMode !== 'blockly' || exporting) return;
+    setExporting(true);
+    setExportError('');
+    try {
+      await document.fonts.ready;
+      const width = Math.max(content.scrollWidth, content.offsetWidth);
+      const height = Math.max(content.scrollHeight, content.offsetHeight);
+      if (format !== 'svg' && (width > 16384 || height > 16384 || width * height > 100_000_000)) {
+        throw new Error('The block view is too large for a raster image. Export it as SVG instead.');
+      }
+      const { toPng, toSvg, toJpeg } = await import('html-to-image');
+      const options = { width, height, pixelRatio: 1, backgroundColor: '#14171d', style: { transform: 'none', transition: 'none', minWidth: '0', width: `${width}px`, height: `${height}px` } };
+      const data = format === 'svg' ? await toSvg(content, options) : format === 'jpeg' ? await toJpeg(content, { ...options, quality: 0.95 }) : await toPng(content, options);
+      const link = document.createElement('a');
+      link.download = `${(procedureName || 'MCreatorBlocks').replace(/[\\/:*?"<>|]/g, '_')}.${format === 'jpeg' ? 'jpg' : format}`;
+      link.href = data;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'Image export failed.');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (!ast) {
     return (
@@ -521,7 +553,7 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
     <div className={`flex flex-col bg-[#181a20] rounded-lg border border-[#2d323e] shadow-lg overflow-hidden font-sans text-xs transition-all ${
       isFullscreen ? 'fixed inset-3 z-50 shadow-2xl border-amber-500/50 bg-[#181a20]' : 'h-full'
     }`}>
-      <div className="bg-[#1e222b] px-2.5 sm:px-3 py-2 border-b border-[#2d323e] flex items-center justify-between gap-2 flex-wrap min-w-0">
+      <div className="relative z-20 bg-[#1e222b] px-2.5 sm:px-3 py-2 border-b border-[#2d323e] flex items-center justify-between gap-2 flex-wrap min-w-0">
         <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
           <div className="flex items-center space-x-1.5 px-2 py-1 bg-[#282d39] rounded border border-[#3b4252] text-[#e5e9f0] min-w-0 max-w-full shadow-xs">
             <Sparkles className="w-3.5 h-3.5 text-[#CEB098] shrink-0" />
@@ -552,6 +584,20 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+          {viewMode === 'blockly' && (
+            <details className="relative">
+              <summary title="Export blocks as an image" aria-label="Export blocks as an image" className="list-none cursor-pointer p-1.5 rounded border border-[#2e3440] bg-[#14171d] text-[#aab3c3] hover:text-white flex items-center gap-1">
+                <Download className="w-3.5 h-3.5" /><ChevronDown className="w-3 h-3" />
+              </summary>
+              <div className="absolute right-0 top-full mt-1 w-32 rounded border border-[#3b4252] bg-[#1e222b] shadow-xl p-1 text-[#eceff4]">
+                {(['png', 'svg', 'jpeg'] as const).map(format => (
+                  <button key={format} type="button" disabled={exporting} onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); void exportImage(format); }} className="block w-full text-left rounded px-2 py-1.5 hover:bg-[#3b4252] disabled:opacity-50">
+                    {exporting ? 'Exporting...' : `Export ${format === 'jpeg' ? 'JPG' : format.toUpperCase()}`}
+                  </button>
+                ))}
+              </div>
+            </details>
+          )}
           <div className="flex items-center bg-[#14171d] p-0.5 rounded border border-[#2e3440] text-[11px]">
             <button
               onClick={() => setViewMode('blockly')}
@@ -622,6 +668,7 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
         />
 
         <div
+          ref={canvasContentRef}
           style={{
             transform: `scale(${zoomLevel / 100})`,
             transformOrigin: 'top left',
@@ -654,6 +701,8 @@ export const VisualBlockCanvas: React.FC<VisualBlockCanvasProps> = ({
           <Trash2 className="w-4 h-4" />
         </div>
       </div>
+
+      {exportError && <div role="alert" className="px-3 py-2 text-[#ffb4a9] bg-[#3d2224]">Image export failed: {exportError}</div>}
 
       {hasBlockTypeInAST(ast, 'entity_nbt_num_set') && (
         <div className="bg-[#12141a] px-3.5 py-1.5 border-t border-[#2d323e] text-[#e06c75] font-mono text-[11px] flex items-center gap-2 select-text">
@@ -3218,7 +3267,8 @@ const InlineValueBlock: React.FC<{
   }
 
   if (node.type === 'math_java_constants' || (node.type === 'math_dual_ops' && (node.fields?.OP === 'RANDOM' || node.title?.includes('Random')))) {
-    const constLabel = node.fields?.CONSTANT === 'PI' ? 'π' : node.fields?.CONSTANT === 'E' ? 'e' : 'Random [0,1)';
+    const constantLabels: Record<string, string> = { PI: 'π', E: 'e', RANDOM: 'Random [0,1)', NORMAL: 'Random normal distribution', INFINITY: '∞', NINFINITY: '-∞', NAN: 'NaN' };
+    const constLabel = constantLabels[node.fields?.CONSTANT || 'RANDOM'] || node.fields?.CONSTANT || 'Random [0,1)';
     return (
       <div
         onClick={(e) => {
@@ -3345,6 +3395,7 @@ const InlineValueBlock: React.FC<{
 
   if (node.type === 'math_singular_ops') {
     const op = node.fields?.OP || 'SIN';
+    const labels: Record<string, string> = { ROOT: 'square root', CUBEROOT: 'cube root', ROUNDUP: 'round up', ROUNDDOWN: 'round down', ABS: 'absolute', SIGNUM: 'signum', RAD2DEG: 'RAD to DEG', DEG2RAD: 'DEG to RAD' };
     const numBlock = node.values?.find(v => v.name === 'NUM')?.block;
     return (
       <div
@@ -3355,7 +3406,7 @@ const InlineValueBlock: React.FC<{
         style={{ backgroundColor: '#5b67a5', borderColor: '#485387' }}
       >
         <span className="bg-white/95 text-[#14171d] font-bold px-2 py-0.5 rounded text-[11px] flex items-center gap-1 shadow-xs">
-          {op.toLowerCase()} <ChevronDown className="w-3 h-3 opacity-70" />
+          {labels[op] || op.toLowerCase()} <ChevronDown className="w-3 h-3 opacity-70" />
         </span>
         {numBlock && (
           <InlineValueBlock
@@ -4117,8 +4168,9 @@ const InlineValueBlock: React.FC<{
   }
 
   if (node.type.startsWith('custom_dependency_')) {
-    const depType = node.type.replace('custom_dependency_', '').replace(/_/g, ' ');
-    const depName = node.fields?.dependencyName || node.title || 'dependencyName';
+    const rawDepType = node.type.replace('custom_dependency_', '').replace(/_/g, ' ');
+    const depType = rawDepType === 'string' ? 'text' : rawDepType;
+    const depName = node.fields?.NAME || 'dependencyName';
     return (
       <div
         onClick={(e) => {
@@ -4968,7 +5020,7 @@ const InlineValueBlock: React.FC<{
   if (node.type === 'math_binary' || node.type === 'math_dual_ops') {
     const leftVal = node.values?.find(v => v.name === 'A')?.block;
     const rightVal = node.values?.find(v => v.name === 'B')?.block;
-    const op = node.fields?.OP === 'ADD' ? '+' : node.fields?.OP === 'MINUS' ? '-' : node.fields?.OP === 'MULTIPLY' ? '×' : node.fields?.OP === 'DIVIDE' ? '÷' : node.fields?.OP || '+';
+    const op = node.fields?.OP === 'ADD' ? '+' : node.fields?.OP === 'MINUS' ? '-' : node.fields?.OP === 'MULTIPLY' ? '×' : node.fields?.OP === 'DIVIDE' || node.fields?.OP === 'DIVIDE_DOUBLE' ? '÷' : node.fields?.OP === 'POWER' ? '^' : node.fields?.OP || '+';
 
     return (
       <div

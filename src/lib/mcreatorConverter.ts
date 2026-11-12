@@ -226,7 +226,7 @@ export function translateJavaToMCreator(
     if (code.includes('Entity entity') || code.includes('entity') || code.includes('LivingEntity')) {
       dependencies.add('entity');
     }
-    if (detectedEventTrigger === 'entity_attacked') {
+    if (detectedEventTrigger === 'entity_attacked' || detectedEventTrigger === 'entity_pre_hurt') {
       dependencies.add('entity');
       dependencies.add('sourceentity');
       dependencies.add('amount');
@@ -405,6 +405,21 @@ export function translateJavaToMCreator(
       title: 'Custom code snippet',
       fields: { CODE: '// Verbatim Java logic' },
     };
+  }
+
+  if (dependencies.has('amount') && !variables.some(variable => variable.name === 'amount')) {
+    const replaceAmount = (node: BlockASTNode): void => {
+      if (node.type === 'variables_get_number' && node.fields?.VAR === 'local:amount') {
+        node.type = 'custom_dependency_number';
+        node.category = 'advanced';
+        node.title = 'Number dependency amount';
+        node.fields = { NAME: 'amount' };
+      }
+      node.values?.forEach(value => { if (value.block) replaceAmount(value.block); });
+      node.statements?.forEach(statement => { if (statement.block) replaceAmount(statement.block); });
+      if (node.next) replaceAmount(node.next);
+    };
+    replaceAmount(rootNode);
   }
 
   const blocklyXml = generateBlocklyXmlFromAST(rootNode, elementConfig.extension, detectedEventTrigger, variables);
@@ -721,6 +736,8 @@ export function extractClassMethods(code: string): DetectedMethod[] {
               eventTrigger = "player_left_click_air";
             } else if (header.includes("RightClickEmpty") || mName === "onRightClick") {
               eventTrigger = "player_right_click_empty_hand";
+            } else if (header.includes("LivingDamageEvent.Pre")) {
+              eventTrigger = "entity_pre_hurt";
             } else if (header.includes("LivingIncomingDamageEvent") || header.includes("LivingDamageEvent") || mName === "onEntityAttacked") {
               eventTrigger = "entity_attacked";
             } else if (header.includes("LivingDeathEvent") || mName === "onEntityDeath") {
@@ -2431,7 +2448,7 @@ function parseJavaStatementInternal(
 
     const mathBinary: BlockASTNode = {
       id: `math_op_${idSeq}`,
-      type: 'math_binary',
+      type: 'math_dual_ops',
       category: 'math',
       title: op,
       fields: { OP: op === '+' ? 'ADD' : op === '-' ? 'MINUS' : op === '*' ? 'MULTIPLY' : 'DIVIDE' },
@@ -2468,7 +2485,7 @@ function parseJavaStatementInternal(
 
     const mathBinary: BlockASTNode = {
       id: `math_inc_${idSeq}`,
-      type: 'math_binary',
+      type: 'math_dual_ops',
       category: 'math',
       title: isInc ? '+' : '-',
       fields: { OP: op },
@@ -3291,8 +3308,7 @@ function parseJavaStatementInternal(
   }
 
   if (stmt.includes('.heal(') || stmt.includes('.setHealth(')) {
-    const amtMatch = stmt.match(/(?:heal|setHealth)\(([^)]+)\)/);
-    const amtExpr = amtMatch ? amtMatch[1].trim() : '1';
+    const amtExpr = extractFunctionArguments(stmt, stmt.includes('.setHealth(') ? 'setHealth' : 'heal')[0]?.trim() || '1';
 
     breakdown.push({ javaLine: stmt, mcreatorBlock: 'entity_set_health', explanation: 'Set entity health or heal' });
     return {
@@ -4827,6 +4843,74 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     }
   }
 
+  if (expr.startsWith('!') && !expr.startsWith('!=') && findTopLevelBinaryOp(expr, '&&') === -1 && findTopLevelBinaryOp(expr, '||') === -1) {
+    return { id: `neg_${seq}`, type: 'logic_negate', category: 'logic', title: 'not', values: [{ name: 'BOOL', block: parseExpressionToAST(expr.slice(1).trim(), seq * 10 + 1) }] };
+  }
+
+  // Match the complete call before inspecting its arguments for other patterns.
+  // The MCreator generator emits these functions around arbitrary expressions.
+  const mathCall = expr.match(/^Math\.(sqrt|cbrt|round|ceil|floor|abs|signum|log|log10|sin|cos|tan|asin|acos|atan|toDegrees|toRadians|pow|min|max|hypot|atan2|exp)\s*\(/);
+  if (mathCall) {
+    const open = expr.indexOf('(', mathCall[0].length - 1);
+    let nesting = 0, end = -1, quote = '';
+    for (let i = open; i < expr.length; i++) {
+      const ch = expr[i];
+      if (quote) { if (ch === '\\') i++; else if (ch === quote) quote = ''; }
+      else if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === '(') nesting++;
+      else if (ch === ')' && --nesting === 0) { end = i; break; }
+    }
+    if (end === expr.length - 1) {
+      const args = splitArgs(expr.slice(open + 1, end));
+      const unary: Record<string, string> = { sqrt: 'ROOT', cbrt: 'CUBEROOT', round: 'ROUND', ceil: 'ROUNDUP', floor: 'ROUNDDOWN', abs: 'ABS', signum: 'SIGNUM', log: 'LN', log10: 'LOG10', sin: 'SIN', cos: 'COS', tan: 'TAN', asin: 'ASIN', acos: 'ACOS', atan: 'ATAN', toDegrees: 'RAD2DEG', toRadians: 'DEG2RAD' };
+      const binary: Record<string, string> = { pow: 'POWER', min: 'MIN', max: 'MAX', hypot: 'HYPOT', atan2: 'ATAN2' };
+      const fn = mathCall[1];
+      if (unary[fn] && args.length === 1) return { id: `math_s_${seq}`, type: 'math_singular_ops', category: 'math', title: fn, fields: { OP: unary[fn] }, values: [{ name: 'NUM', block: parseExpressionToAST(args[0], seq * 10 + 1) }] };
+      if (binary[fn] && args.length === 2) return { id: `math_d_${seq}`, type: 'math_dual_ops', category: 'math', title: fn, fields: { OP: binary[fn] }, values: [{ name: 'A', block: parseExpressionToAST(args[0], seq * 10 + 1) }, { name: 'B', block: parseExpressionToAST(args[1], seq * 10 + 2) }] };
+      if (fn === 'exp' && args.length === 1) return { id: `snip_expr_${seq}`, type: 'custom_code_snippet', category: 'code', title: 'Custom code snippet (Expression)', fields: { CODE: expr }, isSnippetValue: true };
+    }
+  }
+
+  const healthTernary = expr.match(/^([\w.]+)\s+instanceof\s+LivingEntity\s+(\w+)\s*\?\s*\2\.getHealth\(\)\s*:\s*-1$/);
+  if (healthTernary) {
+    return { id: `health_${seq}`, type: 'entity_health', category: 'entity', title: 'Current health of entity', values: [{ name: 'entity', block: parseExpressionToAST(healthTernary[1], seq * 10 + 1) }] };
+  }
+
+  // Exact zero-argument generators from MCreator's entity data toolbox.
+  const entityDataMethods: Record<string, [string, string]> = {
+    isAlive: ['entity_isalive', 'alive'], isVehicle: ['entity_isbeingridden', 'being ridden'],
+    isOnFire: ['entity_isburning', 'burning'], fireImmune: ['entity_isimmunetofire', 'immune to fire'],
+    isInLava: ['entity_isinlava', 'in lava'], isInWall: ['entity_isinwall', 'inside a solid wall'],
+    isInvisible: ['entity_isinvisible', 'invisible'], isInvulnerable: ['entity_isinvulnerable', 'invulnerable'],
+    isInWater: ['entity_isinwater', 'in water'], isInWaterRainOrBubble: ['entity_isinwaterrain_orbubblecolumn', 'in water, rain or bubble column'],
+    isInWaterOrBubble: ['entity_isinwater_orbubblecolumn', 'in water or bubble column'], onGround: ['entity_isonground', 'on ground'],
+    isPassenger: ['entity_isriding', 'riding'], isShiftKeyDown: ['entity_issneaking', 'sneaking'],
+    isSprinting: ['entity_issprinting', 'sprinting'], isAttackable: ['entity_is_attackable', 'attackable'],
+    isCurrentlyGlowing: ['entity_is_glowing', 'glowing'], isSwimming: ['entity_is_swimming', 'swimming'],
+    isUnderWater: ['entity_is_underwater', 'underwater'], isNoGravity: ['entity_has_nogravity', 'without gravity'],
+  };
+  const directEntityData = expr.match(/^([a-zA-Z_$][\w$]*)\.([a-zA-Z]+)\(\)$/);
+  if (directEntityData && entityDataMethods[directEntityData[2]]) {
+    const [type, title] = entityDataMethods[directEntityData[2]];
+    return { id: `entity_data_${seq}`, type, category: 'entity', title: `Is entity ${title}`, values: [{ name: 'entity', block: parseExpressionToAST(directEntityData[1], seq * 10 + 1) }] };
+  }
+
+  const guardedEntityData = expr.match(/^([a-zA-Z_$][\w$]*)\s+instanceof\s+(LivingEntity|Mob)\s+([\w$]+)\s*&&\s*\3\.(isAggressive|isBlocking|isBaby|isSleeping|isFallFlying)\(\)$/);
+  if (guardedEntityData) {
+    const guardedTypes: Record<string, [string, string, string]> = {
+      isAggressive: ['Mob', 'entity_isaggressive', 'currently aggressive'],
+      isBlocking: ['LivingEntity', 'entity_isblocking', 'blocking'],
+      isBaby: ['LivingEntity', 'entity_ischild', 'a child'],
+      isSleeping: ['LivingEntity', 'entity_issleeping', 'sleeping'],
+      isFallFlying: ['LivingEntity', 'entity_is_elytra_flying', 'elytra flying'],
+    };
+    const [required, type, title] = guardedTypes[guardedEntityData[4]];
+    if (guardedEntityData[2] === required) return { id: `entity_data_${seq}`, type, category: 'entity', title: `Is entity ${title}`, values: [{ name: 'entity', block: parseExpressionToAST(guardedEntityData[1], seq * 10 + 1) }] };
+  }
+
+  const explosionImmunity = expr.match(/^([a-zA-Z_$][\w$]*)\.ignoreExplosion\(new\s+Explosion\(\1\.level\(\),\s*null,\s*0,\s*0,\s*0,\s*4,\s*true,\s*Explosion\.BlockInteraction\.DESTROY\)\)$/);
+  if (explosionImmunity) return { id: `entity_data_${seq}`, type: 'entity_isimmunetoexplosions', category: 'entity', title: 'Is entity immune to explosions', values: [{ name: 'entity', block: parseExpressionToAST(explosionImmunity[1], seq * 10 + 1) }] };
+
   const handItem = expr.match(/^([\w.]+)\s+instanceof\s+LivingEntity\s+(\w+)\s*\?\s*\2\.get(MainHand|Offhand)Item\(\)\s*:\s*ItemStack\.EMPTY$/);
   if (handItem) {
     const main = handItem[3] === 'MainHand';
@@ -4843,13 +4927,18 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     ] };
   }
 
-  if (/^\(?\s*(?:\(int\)|int\s*\))?\s*(?:Double\.POSITIVE_INFINITY|Float\.POSITIVE_INFINITY|Integer\.MAX_VALUE)\s*\)?$/i.test(expr)) {
+  const javaConstants: Record<string, [string, string]> = {
+    'Double.POSITIVE_INFINITY': ['INFINITY', '∞'],
+    'Double.NEGATIVE_INFINITY': ['NINFINITY', '-∞'],
+    'Double.NaN': ['NAN', 'NaN'],
+  };
+  if (javaConstants[expr]) {
     return {
-      id: `math_num_${seq}`,
-      type: 'math_number',
+      id: `math_const_${seq}`,
+      type: 'math_java_constants',
       category: 'math',
-      title: '∞',
-      fields: { NUM: '∞' },
+      title: javaConstants[expr][1],
+      fields: { CONSTANT: javaConstants[expr][0] },
     };
   }
 
@@ -4970,9 +5059,9 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     const quoteMatch = rest.match(/["']([^"']+)["']/);
     const tagArg = quoteMatch ? quoteMatch[1] : "minecraft:logs";
 
-    let itemAST: any = { id: `item_hand_${seq}`, type: "entity_iteminhand", category: "entity", title: "Item in main-hand of", values: [{ name: "entity", block: { id: `ent_dep_${seq}`, type: "entity_from_deps", category: "entity", title: "Event/target entity" } }] };
+    let itemAST: BlockASTNode = parseExpressionToAST(rawStack, seq * 10 + 1);
     if (rawStack.includes("getOffhandItem")) {
-      itemAST = { id: `item_offhand_${seq}`, type: "entity_iteminoffhand", category: "entity", title: "Item in off-hand of", values: [{ name: "entity", block: { id: `ent_dep_${seq}`, type: "entity_from_deps", category: "entity", title: "Event/target entity" } }] };
+      itemAST = parseExpressionToAST(rawStack, seq * 10 + 1);
     } else if (rawStack.includes("itemstack") || rawStack.includes("item")) {
       itemAST = { id: `prov_item_${seq}`, type: "provided_itemstack", category: "item", title: "Provided itemstack" };
     }
@@ -5055,16 +5144,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
       category: 'logic',
       title: 'not',
       values: [{ name: 'BOOL', block: innerAST }],
-    };
-  }
-
-  if (expr.includes('Double.POSITIVE_INFINITY') || expr.includes('Double.MAX_VALUE')) {
-    return {
-      id: `num_inf_${seq}`,
-      type: 'math_number',
-      category: 'math',
-      title: '∞',
-      fields: { NUM: '∞' },
     };
   }
 
@@ -5627,7 +5706,7 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
 
     return {
       id: `math_bin_${seq}`,
-      type: 'math_binary',
+      type: 'math_dual_ops',
       category: 'math',
       title: op,
       fields: { OP: op === '+' ? 'ADD' : 'MINUS' },
@@ -5660,7 +5739,7 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
 
     return {
       id: `math_bin_${seq}`,
-      type: 'math_binary',
+      type: 'math_dual_ops',
       category: 'math',
       title: op,
       fields: { OP: op === '*' ? 'MULTIPLY' : 'DIVIDE' },
@@ -6179,40 +6258,6 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     }
   }
 
-  const singleMathMatch = expr.match(/^Math\.(sin|cos|tan|asin|acos|atan|abs|sqrt|cbrt|floor|ceil|round|log|log10|exp|toDegrees|toRadians|signum)\(([\s\S]+)\)$/);
-  if (singleMathMatch) {
-    const fn = singleMathMatch[1];
-    const arg = singleMathMatch[2].trim();
-    const opMap: Record<string, string> = {
-      sin: 'SIN',
-      cos: 'COS',
-      tan: 'TAN',
-      asin: 'ASIN',
-      acos: 'ACOS',
-      atan: 'ATAN',
-      abs: 'ABS',
-      sqrt: 'ROOT',
-      cbrt: 'CBRT',
-      floor: 'ROUNDDOWN',
-      ceil: 'ROUNDUP',
-      round: 'ROUND',
-      log: 'LN',
-      log10: 'LOG10',
-      exp: 'EXP',
-      toDegrees: 'DEG',
-      toRadians: 'RAD',
-      signum: 'SIGN',
-    };
-    return {
-      id: `math_s_${seq}`,
-      type: 'math_singular_ops',
-      category: 'math',
-      title: fn,
-      fields: { OP: opMap[fn] || 'SIN' },
-      values: [{ name: 'NUM', block: parseExpressionToAST(arg, seq * 10 + 1) }],
-    };
-  }
-
   if (expr.includes('Math.random()')) {
     return {
       id: `rand_${seq}`,
@@ -6608,7 +6653,7 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     const rawEntity = expr.replace('.getHealth()', '').trim();
     return {
       id: `health_${seq}`,
-      type: 'entity_get_health',
+      type: 'entity_health',
       category: 'entity',
       title: 'Current health of entity',
       values: [{ name: 'entity', block: entityDepBlock(rawEntity) }],
@@ -6618,7 +6663,7 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
     const rawEntity = expr.replace('.getMaxHealth()', '').trim();
     return {
       id: `max_health_${seq}`,
-      type: 'entity_get_max_health',
+      type: 'entity_health_max',
       category: 'entity',
       title: 'Max health of entity',
       values: [{ name: 'entity', block: entityDepBlock(rawEntity) }],
@@ -7241,23 +7286,23 @@ export function parseExpressionToAST(rawExpr: string, seq: number, depth: number
   if (expr.includes('dependencies.get(')) {
     const match = expr.match(/dependencies\.get\s*\("([^"]+)"\)/);
     const depName = match ? match[1] : 'name';
-    let depType = 'dependency_number';
+    let depType = 'custom_dependency_number';
     let title = `Number dependency [${depName}]`;
 
     if (expr.includes('(String)') || depName.includes('text') || depName.includes('str')) {
-      depType = 'dependency_text';
+      depType = 'custom_dependency_string';
       title = `Text dependency [${depName}]`;
     } else if (expr.includes('(Vec3)') || depName.includes('vector')) {
-      depType = 'dependency_vector';
+      depType = 'custom_dependency_vector';
       title = `Vector dependency [${depName}]`;
     } else if (expr.includes('(Entity)') || depName.includes('entity')) {
-      depType = 'dependency_entity';
+      depType = 'custom_dependency_entity';
       title = `Entity dependency [${depName}]`;
     } else if (expr.includes('(ItemStack)') || depName.includes('itemstack')) {
-      depType = 'dependency_itemstack';
+      depType = 'custom_dependency_itemstack';
       title = `Itemstack dependency [${depName}]`;
     } else if (expr.includes('(Boolean)') || depName.includes('logic')) {
-      depType = 'dependency_logic';
+      depType = 'custom_dependency_logic';
       title = `Logic dependency [${depName}]`;
     }
 
@@ -8053,7 +8098,8 @@ function generateBlocklyXmlFromAST(
   }
 
   function renderNode(node: BlockASTNode, indent: string = '  ', isRoot: boolean = false): string {
-    let res = `${indent}<block type="${node.type}"${isRoot ? ' x="40" y="40"' : ''}>\n`;
+    const blockType = node.type === 'custom_code_snippet' ? (node.isSnippetValue ? 'java_code_get' : 'java_code') : node.type;
+    let res = `${indent}<block type="${blockType}"${isRoot ? ' x="40" y="40"' : ''}>\n`;
 
     if (node.type === 'event_trigger') {
       res = `${indent}<block type="event_trigger" deletable="false" x="40" y="40">\n`;
